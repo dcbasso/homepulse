@@ -1,0 +1,17 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /speedtest_results/{doc} {
+      allow read: if request.auth != null && request.auth.token.email == 'YOUR_ALLOWED_EMAIL';
+    }
+    match /heartbeats/{doc} {
+      allow read: if request.auth != null && request.auth.token.email == 'YOUR_ALLOWED_EMAIL';
+    }
+    match /incidents/{doc} {
+      allow read: if request.auth != null && request.auth.token.email == 'YOUR_ALLOWED_EMAIL';
+    }
+    match /monitor_config/{doc} {
+      allow read, write: if request.auth != null && request.auth.token.email == 'YOUR_ALLOWED_EMAIL';
+    }
+  }
+}

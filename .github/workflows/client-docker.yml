@@ -1,0 +1,120 @@
+name: homepulse-client Docker image
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "client/homepulse-client/**"
+  pull_request:
+    paths:
+      - "client/homepulse-client/**"
+  workflow_dispatch: {}
+
+env:
+  IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/homepulse-client
+
+jobs:
+  build-and-test:
+    name: Build and test Rust client
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: client/homepulse-client
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry and build artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: client/homepulse-client
+
+      - name: Run cargo build
+        run: cargo build --release
+
+      - name: Run cargo test
+        run: cargo test --release
+
+  docker-publish:
+    name: Build and push Docker image
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch'
+    permissions:
+      contents: write
+      packages: write
+    defaults:
+      run:
+        working-directory: client/homepulse-client
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Read client version from Cargo.toml
+        id: version
+        run: |
+          VERSION=$(grep -m1 '^version' Cargo.toml | sed -E 's/version *= *"(.*)"/\1/')
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check if this version was already published
+        id: check
+        run: |
+          if docker manifest inspect "${IMAGE_NAME}:${{ steps.version.outputs.version }}" > /dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up Docker Buildx
+        if: steps.check.outputs.exists == 'false'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push image
+        if: steps.check.outputs.exists == 'false'
+        uses: docker/build-push-action@v6
+        with:
+          context: client/homepulse-client
+          file: client/homepulse-client/docker/Dockerfile
+          push: true
+          tags: |
+            ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}
+            ${{ env.IMAGE_NAME }}:latest
+
+      - name: Skip notice
+        if: steps.check.outputs.exists == 'true'
+        run: echo "Version ${{ steps.version.outputs.version }} already published as ${IMAGE_NAME}:${{ steps.version.outputs.version }} — skipping build."
+
+      - name: Install Rust toolchain
+        if: steps.check.outputs.exists == 'false'
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry and build artifacts
+        if: steps.check.outputs.exists == 'false'
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: client/homepulse-client
+
+      - name: Build release binary (linux x86_64)
+        if: steps.check.outputs.exists == 'false'
+        run: |
+          cargo build --release
+          cp target/release/homepulse-client homepulse-client-linux-x86_64
+
+      - name: Create GitHub Release with binary
+        if: steps.check.outputs.exists == 'false'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: client-v${{ steps.version.outputs.version }}
+          name: homepulse-client v${{ steps.version.outputs.version }}
+          files: client/homepulse-client/homepulse-client-linux-x86_64

@@ -1,0 +1,8 @@
+# Copy this file to terraform.tfvars and fill in your values.
+# terraform.tfvars is gitignored — never commit it.
+
+project_id               = "your-gcp-project-id"
+region                   = "southamerica-east1"
+alert_email              = "youremail@gmail.com"
+sa_email                 = "speedtest-sa@your-gcp-project-id.iam.gserviceaccount.com"
+max_minutes_without_data = 45

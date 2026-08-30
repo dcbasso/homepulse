@@ -1,0 +1,59 @@
+# Rust
+**/target/
+
+# Node / Angular
+**/node_modules/
+**/.angular/cache/
+**/dist/
+
+# Pastas deploy — credenciais e tokens locais, nunca commitar
+**/deploy/
+# Exceto arquivos de referência dentro de deploy
+!**/deploy/*.example
+!**/deploy/*.md
+
+# Scripts de deploy com credenciais embutidas
+**/deploy.sh
+
+# Configurações locais com credenciais (commitar apenas o .example)
+client/homepulse-client/config.json
+
+# OAuth client credentials used by the one-off refresh-token script
+backend/homepulse-notification-server/scripts/client_secret.json
+
+# Firebase
+**/.firebase/
+
+# Terraform — estado e variáveis locais
+**/terraform/terraform.tfvars
+**/terraform/.terraform/
+**/terraform/.terraform.lock.hcl
+**/terraform/terraform.tfstate
+**/terraform/terraform.tfstate.backup
+**/terraform/tfplan
+
+# Ambientes Angular — valores reais ficam em deploy/
+frontend/homepulse-web/src/environments/environment.ts
+frontend/homepulse-web/src/environments/environment.prod.ts
+
+# Env files
+.env
+*.env
+
+# Editor / IDE / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+*.swp
+*~
+
+# Claude Code
+.claude/
+
+# Python bytecode cache
+**/__pycache__/
+*.pyc
+
+# Local deploy rules (contains real allowed-email substitution, never commit)
+.rules

@@ -1,0 +1,16 @@
+services:
+  homepulse-client:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: homepulse-client:latest
+    container_name: homepulse-client
+    restart: unless-stopped
+    # Host networking avoids the veth/NAT overhead of the default bridge network,
+    # which would otherwise skew the download/upload/ping measurements.
+    network_mode: host
+    environment:
+      - CONFIG_PATH=/etc/homepulse/config.json
+    volumes:
+      - ../config.json:/etc/homepulse/config.json:ro
+      - ../deploy/speedtest-monitor-b5cd2-sa.json:/etc/homepulse/service-account.json:ro
