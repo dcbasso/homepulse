@@ -1,0 +1,245 @@
+use crate::config::{FirestoreConfig, ServiceAccountKey};
+use crate::speedtest::SpeedtestResult;
+use anyhow::{bail, Context, Result};
+use chrono::Utc;
+use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
+use serde::{Deserialize, Serialize};
+use std::sync::Arc;
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use tokio::sync::Mutex;
+
+const DATASTORE_SCOPE: &str = "https://www.googleapis.com/auth/datastore";
+
+/// Placeholder stored in Firestore when an IP lookup (v4 or v6) failed.
+const UNKNOWN_IP: &str = "unknown";
+
+/// Lifetime of an OAuth2 access token issued by the Google token endpoint, in seconds.
+const TOKEN_LIFETIME_SECS: u64 = 3600;
+
+/// Safety margin subtracted from the token lifetime before a cached token is
+/// considered stale and worth refreshing, in seconds.
+const TOKEN_REFRESH_MARGIN_SECS: u64 = 300;
+
+/// Shared cache holding the last issued access token and the instant it was obtained.
+///
+/// Wrapped in `Arc<Mutex<_>>` so the heartbeat and speedtest loops can share a
+/// single cached token instead of each fetching its own, since the heartbeat
+/// runs far more often than the token's 1-hour lifetime would otherwise justify.
+pub type TokenCache = Arc<Mutex<Option<(String, Instant)>>>;
+
+/// Creates a new, empty shared token cache.
+pub fn new_token_cache() -> TokenCache {
+    Arc::new(Mutex::new(None))
+}
+
+/// JWT claims used in the Service Account bearer token flow (RFC 7523).
+#[derive(Debug, Serialize)]
+struct Claims {
+    iss: String,
+    scope: String,
+    aud: String,
+    iat: u64,
+    exp: u64,
+}
+
+#[derive(Debug, Deserialize)]
+struct TokenResponse {
+    access_token: String,
+}
+
+/// Exchanges a signed Service Account JWT for an OAuth2 access token.
+///
+/// Follows the "JWT Bearer" flow: signs a JWT with the private key and POSTs
+/// it to the Google token endpoint. No browser interaction required.
+///
+/// # Arguments
+/// * `config` - Firestore settings containing the Service Account key path.
+///
+/// # Errors
+/// Returns an error if the key file cannot be read, the JWT cannot be signed,
+/// or the token endpoint rejects the request.
+pub async fn get_access_token(config: &FirestoreConfig) -> Result<String> {
+    let key = ServiceAccountKey::load(&config.service_account_key_path)?;
+
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .context("Failed to read system clock")?
+        .as_secs();
+
+    let claims = Claims {
+        iss: key.client_email.clone(),
+        scope: DATASTORE_SCOPE.to_string(),
+        aud: key.token_uri.clone(),
+        iat: now,
+        exp: now + 3600,
+    };
+
+    let header = Header::new(Algorithm::RS256);
+    let encoding_key = EncodingKey::from_rsa_pem(key.private_key.as_bytes())
+        .context("Invalid private key in service-account.json")?;
+
+    let jwt = encode(&header, &claims, &encoding_key)
+        .context("Failed to sign the JWT")?;
+
+    let client = reqwest::Client::new();
+    let response = client
+        .post(&key.token_uri)
+        .form(&[
+            ("grant_type", "urn:ietf:params:oauth:grant-type:jwt-bearer"),
+            ("assertion", jwt.as_str()),
+        ])
+        .send()
+        .await
+        .context("Failed to call the Google token endpoint")?;
+
+    let status = response.status();
+    let body = response.text().await.unwrap_or_default();
+
+    if !status.is_success() {
+        bail!("Google rejected authentication ({}): {}", status, body);
+    }
+
+    let token: TokenResponse = serde_json::from_str(&body)
+        .with_context(|| format!("Unexpected response from token endpoint: {}", body))?;
+
+    Ok(token.access_token)
+}
+
+/// Returns a valid OAuth2 access token, reusing the cached one when possible.
+///
+/// The cached token is reused as long as it still has more than
+/// [`TOKEN_REFRESH_MARGIN_SECS`] seconds left of its
+/// [`TOKEN_LIFETIME_SECS`]-second lifetime; otherwise a fresh token is
+/// fetched via [`get_access_token`] and the cache is updated.
+///
+/// # Arguments
+/// * `config` - Firestore settings containing the Service Account key path.
+/// * `cache` - Shared token cache to read from and refresh.
+///
+/// # Errors
+/// Returns an error if fetching a fresh token via [`get_access_token`] fails.
+pub async fn get_cached_access_token(config: &FirestoreConfig, cache: &TokenCache) -> Result<String> {
+    let mut guard = cache.lock().await;
+
+    if let Some((token, issued_at)) = guard.as_ref() {
+        let usable_lifetime = Duration::from_secs(TOKEN_LIFETIME_SECS - TOKEN_REFRESH_MARGIN_SECS);
+        if issued_at.elapsed() < usable_lifetime {
+            return Ok(token.clone());
+        }
+    }
+
+    let fresh_token = get_access_token(config).await?;
+    *guard = Some((fresh_token.clone(), Instant::now()));
+    Ok(fresh_token)
+}
+
+/// Appends a speedtest result as a new document to the Firestore collection.
+///
+/// Uses the Firestore REST API v1. The document ID is auto-generated by Firestore.
+///
+/// # Arguments
+/// * `config` - Firestore connection settings (project ID, Service Account key path).
+/// * `collection` - Target Firestore collection name.
+/// * `token` - OAuth2 bearer token obtained via [`get_access_token`] or [`get_cached_access_token`].
+/// * `result` - Parsed speedtest measurement to persist.
+///
+/// # Errors
+/// Returns an error if the HTTP request fails or Firestore rejects the document.
+pub async fn append_document(
+    config: &FirestoreConfig,
+    collection: &str,
+    token: &str,
+    result: &SpeedtestResult,
+) -> Result<()> {
+    let url = format!(
+        "https://firestore.googleapis.com/v1/projects/{}/databases/speedtest-monitordb-one/documents/{}",
+        config.project_id, collection
+    );
+
+    let body = serde_json::json!({
+        "fields": {
+            "timestamp":       { "timestampValue": result.timestamp.to_rfc3339() },
+            "download_mbps":   { "doubleValue": result.download_mbps },
+            "upload_mbps":     { "doubleValue": result.upload_mbps },
+            "ping_ms":         { "doubleValue": result.ping_ms },
+            "jitter_ms":       { "doubleValue": result.jitter_ms },
+            "packet_loss_pct": { "doubleValue": result.packet_loss_pct },
+            "server":          { "stringValue": result.server },
+            "isp":             { "stringValue": result.isp },
+            "external_ip_v4":  { "stringValue": result.external_ip_v4.as_deref().unwrap_or(UNKNOWN_IP) },
+            "external_ip_v6":  { "stringValue": result.external_ip_v6.as_deref().unwrap_or(UNKNOWN_IP) },
+            "result_url":      { "stringValue": result.result_url }
+        }
+    });
+
+    let client = reqwest::Client::new();
+    let response = client
+        .post(&url)
+        .bearer_auth(token)
+        .json(&body)
+        .send()
+        .await
+        .context("Failed to call the Firestore API")?;
+
+    let status = response.status();
+    if !status.is_success() {
+        let body = response.text().await.unwrap_or_default();
+        bail!("Firestore API returned an error ({}): {}", status, body);
+    }
+
+    Ok(())
+}
+
+/// Appends a liveness heartbeat as a new document to the Firestore collection.
+///
+/// Mirrors [`append_document`] but with a minimal body (`timestamp`,
+/// `external_ip_v4` and `external_ip_v6` only), since the heartbeat only
+/// needs to prove connectivity, not carry a full speedtest measurement.
+///
+/// # Arguments
+/// * `config` - Firestore connection settings (project ID, Service Account key path).
+/// * `collection` - Target Firestore collection name.
+/// * `token` - OAuth2 bearer token obtained via [`get_access_token`] or [`get_cached_access_token`].
+/// * `external_ip_v4` - Public IPv4 resolved via the `whoami` endpoint, or `None` if that lookup failed.
+/// * `external_ip_v6` - Public IPv6 resolved via the `whoami` endpoint, or `None` if that lookup failed.
+///   A failed IP lookup must not prevent the heartbeat write, so `"unknown"` is stored instead.
+///
+/// # Errors
+/// Returns an error if the HTTP request fails or Firestore rejects the document.
+pub async fn append_heartbeat(
+    config: &FirestoreConfig,
+    collection: &str,
+    token: &str,
+    external_ip_v4: Option<&str>,
+    external_ip_v6: Option<&str>,
+) -> Result<()> {
+    let url = format!(
+        "https://firestore.googleapis.com/v1/projects/{}/databases/speedtest-monitordb-one/documents/{}",
+        config.project_id, collection
+    );
+
+    let body = serde_json::json!({
+        "fields": {
+            "timestamp":      { "timestampValue": Utc::now().to_rfc3339() },
+            "external_ip_v4": { "stringValue": external_ip_v4.unwrap_or(UNKNOWN_IP) },
+            "external_ip_v6": { "stringValue": external_ip_v6.unwrap_or(UNKNOWN_IP) }
+        }
+    });
+
+    let client = reqwest::Client::new();
+    let response = client
+        .post(&url)
+        .bearer_auth(token)
+        .json(&body)
+        .send()
+        .await
+        .context("Failed to call the Firestore API")?;
+
+    let status = response.status();
+    if !status.is_success() {
+        let body = response.text().await.unwrap_or_default();
+        bail!("Firestore API returned an error ({}): {}", status, body);
+    }
+
+    Ok(())
+}
