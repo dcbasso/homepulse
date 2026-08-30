@@ -1,0 +1,21 @@
+{
+  "heartbeat": {
+    "interval_minutes": 1,
+    "collection": "heartbeats",
+    "whoami_url": "https://<region>-<project>.cloudfunctions.net/whoami"
+  },
+  "speedtest": {
+    "binary_path": "speedtest",
+    "timeout_seconds": 60,
+    "interval_minutes": 60,
+    "collection": "speedtest_results"
+  },
+  "gcp": {
+    "service_account_key_path": "/etc/speedtest-logger/service-account.json",
+    "project_id": "YOUR_PROJECT_ID"
+  },
+  "log": {
+    "path": "/var/log/speedtest-logger.log",
+    "level": "info"
+  }
+}
