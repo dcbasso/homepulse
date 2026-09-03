@@ -3,6 +3,9 @@
 
 project_id               = "your-gcp-project-id"
 region                   = "southamerica-east1"
-alert_email              = "youremail@gmail.com"
 sa_email                 = "speedtest-sa@your-gcp-project-id.iam.gserviceaccount.com"
 max_minutes_without_data = 45
+
+# Optional: legacy fallback recipient, used only when a household has no
+# `alert_emails` configured in its monitor_config (see variables.tf).
+# alert_email = "youremail@gmail.com"

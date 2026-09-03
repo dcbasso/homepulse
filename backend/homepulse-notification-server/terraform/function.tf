@@ -185,9 +185,9 @@ resource "google_cloud_run_service_iam_member" "whoami_invoker" {
 # requests carrying a valid Firebase ID token for a member of the target
 # household (see _verify_firebase_token/_is_household_member in main.py) —
 # the real access control lives in application code here, not in IAM.
-# ALERT_EMAIL is unused by this endpoint's authorization (kept only as the
-# legacy alert-recipient fallback in _load_monitor_config); removing it from
-# this function's env is Fase 7 (terraform) scope, not this change.
+# ALERT_EMAIL is unused by this endpoint's authorization; it is only the
+# legacy alert-recipient fallback in _load_monitor_config, wired from the
+# now-optional var.alert_email (see ADR 0007/Fase 7 of ROADMAP.md).
 # ---------------------------------------------------------------------------
 
 resource "google_cloudfunctions2_function" "send_test_alert" {
