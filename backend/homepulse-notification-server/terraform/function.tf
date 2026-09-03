@@ -250,3 +250,104 @@ resource "google_cloud_run_service_iam_member" "send_test_alert_invoker" {
   role     = "roles/run.invoker"
   member   = "allUsers"
 }
+
+# ---------------------------------------------------------------------------
+# Cloud Function (Gen 2) — ingest-heartbeat
+#
+# Fase 2 of docs/adr/ROADMAP.md (ADR 0004, 0010). Replaces the Rust client's
+# direct Firestore writes: it now sends a plain HTTP POST with a per-household
+# API key instead of holding a GCP Service Account credential. IAM allows
+# unauthenticated invocation (the client has no GCP identity) — access control
+# is enforced in application code via the API key hash check (see
+# ingest.py::_authenticate).
+# ---------------------------------------------------------------------------
+
+resource "google_cloudfunctions2_function" "ingest_heartbeat" {
+  name     = "ingest-heartbeat"
+  location = var.region
+
+  labels = local.common_labels
+
+  build_config {
+    runtime     = "python312"
+    entry_point = "ingest_heartbeat"
+
+    source {
+      storage_source {
+        bucket = google_storage_bucket.function_source.name
+        object = google_storage_bucket_object.function_source.name
+      }
+    }
+  }
+
+  service_config {
+    # Called once per minute per household — generous headroom is unneeded.
+    available_memory   = "256M"
+    timeout_seconds    = 10
+    min_instance_count = 0
+    max_instance_count = 1
+
+    environment_variables = {
+      GCP_PROJECT_ID     = var.project_id
+      FIRESTORE_DATABASE = var.firestore_database
+    }
+
+    service_account_email = var.sa_email
+  }
+}
+
+resource "google_cloud_run_service_iam_member" "ingest_heartbeat_invoker" {
+  project  = var.project_id
+  location = var.region
+  service  = google_cloudfunctions2_function.ingest_heartbeat.name
+  role     = "roles/run.invoker"
+  member   = "allUsers"
+}
+
+# ---------------------------------------------------------------------------
+# Cloud Function (Gen 2) — ingest-speedtest
+#
+# Same rationale and auth model as ingest-heartbeat above, for the
+# lower-frequency (roughly hourly) speedtest measurement.
+# ---------------------------------------------------------------------------
+
+resource "google_cloudfunctions2_function" "ingest_speedtest" {
+  name     = "ingest-speedtest"
+  location = var.region
+
+  labels = local.common_labels
+
+  build_config {
+    runtime     = "python312"
+    entry_point = "ingest_speedtest"
+
+    source {
+      storage_source {
+        bucket = google_storage_bucket.function_source.name
+        object = google_storage_bucket_object.function_source.name
+      }
+    }
+  }
+
+  service_config {
+    available_memory   = "256M"
+    timeout_seconds    = 10
+    min_instance_count = 0
+    max_instance_count = 1
+
+    environment_variables = {
+      GCP_PROJECT_ID     = var.project_id
+      FIRESTORE_DATABASE = var.firestore_database
+    }
+
+    service_account_email = var.sa_email
+  }
+}
+
+resource "google_cloud_run_service_iam_member" "ingest_speedtest_invoker" {
+  project  = var.project_id
+  location = var.region
+  service  = google_cloudfunctions2_function.ingest_speedtest.name
+  role     = "roles/run.invoker"
+  member   = "allUsers"
+}
