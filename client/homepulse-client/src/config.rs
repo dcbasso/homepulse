@@ -11,17 +11,16 @@ use std::path::Path;
 pub struct Config {
     pub heartbeat: HeartbeatConfig,
     pub speedtest: SpeedtestConfig,
-    pub gcp: FirestoreConfig,
+    pub ingest: IngestConfig,
 }
 
 /// Settings for the liveness heartbeat loop.
 ///
-/// The heartbeat is a cheap, frequent write to Firestore that proves
-/// connectivity without running the expensive Ookla speedtest binary.
+/// The heartbeat is a cheap, frequent HTTP call that proves connectivity
+/// without running the expensive Ookla speedtest binary.
 #[derive(Debug, Deserialize, Clone)]
 pub struct HeartbeatConfig {
     pub interval_minutes: u64,
-    pub collection: String,
     /// `whoami` endpoint. Its domain is dual-stack (both `A` and `AAAA`
     /// DNS records), so the same URL is queried twice by the client: once
     /// forcing an IPv4 socket, once forcing an IPv6 socket.
@@ -34,36 +33,33 @@ pub struct SpeedtestConfig {
     pub binary_path: String,
     pub timeout_seconds: u64,
     pub interval_minutes: u64,
-    pub collection: String,
     /// See [`HeartbeatConfig::whoami_url`].
     pub whoami_url: String,
 }
 
-/// Firestore connection settings (project ID and Service Account key path).
+/// Ingest API connection settings (ADR 0004, ADR 0010).
 ///
-/// Target collections are configured per-writer ([`HeartbeatConfig::collection`]
-/// and [`SpeedtestConfig::collection`]) since heartbeat and speedtest documents
-/// are stored in separate collections.
-#[derive(Debug, Deserialize, Clone)]
-pub struct FirestoreConfig {
-    pub service_account_key_path: String,
-    pub project_id: String,
-}
-
-/// Parsed representation of a Google Service Account JSON key file.
+/// Replaces the previous direct-Firestore Service Account credential: the
+/// client now authenticates with a long-lived per-household API key instead
+/// of holding any GCP identity.
 ///
-/// The structure matches the file produced by GCP Console when creating a
-/// Service Account key of type "JSON".
+/// `heartbeat_url` and `speedtest_url` are two separate URLs (rather than a
+/// single base `ingest_url` + path) because each is deployed as its own
+/// Cloud Functions Gen2 service (see `terraform/function.tf`) with its own
+/// host, matching the `ingest_heartbeat_url` / `ingest_speedtest_url`
+/// Terraform outputs.
 #[derive(Debug, Deserialize, Clone)]
-pub struct ServiceAccountKey {
-    pub client_email: String,
-    pub private_key: String,
-    #[serde(default = "default_token_uri")]
-    pub token_uri: String,
-}
-
-fn default_token_uri() -> String {
-    "https://oauth2.googleapis.com/token".to_string()
+pub struct IngestConfig {
+    /// Raw API key in the form `hpk_<household_id>_<random>`, issued by
+    /// `scripts/issue_api_key.py`. Sent as `Authorization: ApiKey <api_key>`.
+    pub api_key: String,
+    /// Household ID this client belongs to. Not sent to the server (the
+    /// server resolves it from the API key hash), kept here for logging.
+    pub household_id: String,
+    /// URL of the `ingest-heartbeat` Cloud Function.
+    pub heartbeat_url: String,
+    /// URL of the `ingest-speedtest` Cloud Function.
+    pub speedtest_url: String,
 }
 
 impl Config {
@@ -77,19 +73,5 @@ impl Config {
         let config: Config = serde_json::from_str(&raw)
             .context("Failed to parse config.json")?;
         Ok(config)
-    }
-}
-
-impl ServiceAccountKey {
-    /// Loads and deserializes a Service Account key from the given file path.
-    ///
-    /// # Errors
-    /// Returns an error if the file cannot be read or if the JSON is malformed.
-    pub fn load(path: &str) -> Result<Self> {
-        let raw = fs::read_to_string(path)
-            .with_context(|| format!("Failed to read service account key at {}", path))?;
-        let key: ServiceAccountKey = serde_json::from_str(&raw)
-            .context("Failed to parse service-account.json")?;
-        Ok(key)
     }
 }
