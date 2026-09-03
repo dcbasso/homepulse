@@ -6,7 +6,8 @@
     "start": "ng serve",
     "build": "ng build",
     "watch": "ng build --watch --configuration development",
-    "test": "ng test"
+    "test": "ng test",
+    "test:rules": "firebase emulators:exec --only firestore --project homepulse-rules-test \"vitest run --config vitest.rules.config.ts\""
   },
   "private": true,
   "packageManager": "npm@10.9.8",
@@ -33,6 +34,7 @@
     "@angular/build": "^22.0.5",
     "@angular/cli": "^22.0.5",
     "@angular/compiler-cli": "^22.0.0",
+    "@firebase/rules-unit-testing": "^4.0.1",
     "jsdom": "^28.0.0",
     "prettier": "^3.8.1",
     "typescript": "~6.0.2",
