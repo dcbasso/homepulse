@@ -13,4 +13,3 @@ services:
       - CONFIG_PATH=/etc/homepulse/config.json
     volumes:
       - ../config.json:/etc/homepulse/config.json:ro
-      - ../deploy/speedtest-monitor-b5cd2-sa.json:/etc/homepulse/service-account.json:ro

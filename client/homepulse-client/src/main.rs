@@ -1,12 +1,11 @@
 mod config;
-mod firestore;
+mod ingest;
 mod speedtest;
 mod whoami;
 
 use anyhow::Result;
 use clap::Parser;
 use config::Config;
-use firestore::TokenCache;
 use std::path::PathBuf;
 use std::time::Duration;
 use tokio::time::interval;
@@ -18,7 +17,7 @@ const SECONDS_PER_MINUTE: u64 = 60;
 /// Command-line arguments for the homepulse client.
 #[derive(Parser, Debug)]
 #[command(name = "homepulse-client")]
-#[command(about = "Runs a liveness heartbeat loop and a speedtest loop, writing both to Firestore")]
+#[command(about = "Runs a liveness heartbeat loop and a speedtest loop, posting both to the Ingest API")]
 struct Args {
     /// Path to the config.json file.
     #[arg(short, long, default_value = "config.json")]
@@ -33,10 +32,9 @@ async fn main() -> Result<()> {
 
     let args = Args::parse();
     let cfg = Config::load(&args.config)?;
-    let token_cache = firestore::new_token_cache();
 
-    let heartbeat_task = run_heartbeat_loop(cfg.clone(), token_cache.clone());
-    let speedtest_task = run_speedtest_loop(cfg, token_cache);
+    let heartbeat_task = run_heartbeat_loop(cfg.clone());
+    let speedtest_task = run_speedtest_loop(cfg);
 
     tokio::join!(heartbeat_task, speedtest_task);
     Ok(())
@@ -45,47 +43,43 @@ async fn main() -> Result<()> {
 /// Runs the liveness heartbeat loop forever, ticking every
 /// `cfg.heartbeat.interval_minutes` minutes.
 ///
-/// Each tick resolves the public IP via the `whoami` endpoint, obtains a
-/// (possibly cached) OAuth2 access token, and writes a heartbeat document to
-/// Firestore. Any failure is logged and the loop continues to the next tick
-/// rather than aborting the process.
+/// Each tick resolves the public IP via the `whoami` endpoint and posts a
+/// heartbeat to the Ingest API, authenticated with the household's API key.
+/// Any failure is logged and the loop continues to the next tick rather than
+/// aborting the process.
 ///
 /// # Arguments
 /// * `cfg` - Full application configuration.
-/// * `token_cache` - Shared OAuth2 token cache, reused with the speedtest loop.
-async fn run_heartbeat_loop(cfg: Config, token_cache: TokenCache) {
+async fn run_heartbeat_loop(cfg: Config) {
     let period = Duration::from_secs(cfg.heartbeat.interval_minutes * SECONDS_PER_MINUTE);
     let mut ticker = interval(period);
 
     loop {
         ticker.tick().await;
-        if let Err(e) = run_heartbeat_once(&cfg, &token_cache).await {
+        if let Err(e) = run_heartbeat_once(&cfg).await {
             error!("Heartbeat tick failed: {:?}", e);
         }
     }
 }
 
-/// Performs a single heartbeat tick: resolve public IP, authenticate, write to Firestore.
+/// Performs a single heartbeat tick: resolve public IP, post to the Ingest API.
 ///
 /// # Errors
-/// Returns an error if authentication or the Firestore write fails. A failed
-/// IP lookup does not cause an error; `None` is passed through instead.
-async fn run_heartbeat_once(cfg: &Config, token_cache: &TokenCache) -> Result<()> {
+/// Returns an error if the Ingest API call fails. A failed IP lookup does
+/// not cause an error; `None` is passed through instead.
+async fn run_heartbeat_once(cfg: &Config) -> Result<()> {
     let (external_ip_v4, external_ip_v6) = resolve_external_ips(&cfg.heartbeat.whoami_url).await;
 
-    let token = firestore::get_cached_access_token(&cfg.gcp, token_cache).await?;
-    firestore::append_heartbeat(
-        &cfg.gcp,
-        &cfg.heartbeat.collection,
-        &token,
+    ingest::append_heartbeat(
+        &cfg.ingest,
         external_ip_v4.as_deref(),
         external_ip_v6.as_deref(),
     )
     .await?;
 
     info!(
-        "Heartbeat written (external_ip_v4={:?}, external_ip_v6={:?})",
-        external_ip_v4, external_ip_v6
+        "Heartbeat sent (household_id={}, external_ip_v4={:?}, external_ip_v6={:?})",
+        cfg.ingest.household_id, external_ip_v4, external_ip_v6
     );
     Ok(())
 }
@@ -117,32 +111,30 @@ async fn resolve_external_ips(whoami_url: &str) -> (Option<String>, Option<Strin
 
 /// Runs the speedtest loop forever, ticking every `cfg.speedtest.interval_minutes` minutes.
 ///
-/// Each tick runs the Ookla `speedtest` CLI, obtains a (possibly cached)
-/// OAuth2 access token, and writes the result to Firestore. Any failure is
+/// Each tick runs the Ookla `speedtest` CLI and posts the result to the
+/// Ingest API, authenticated with the household's API key. Any failure is
 /// logged and the loop continues to the next tick rather than aborting the
 /// process.
 ///
 /// # Arguments
 /// * `cfg` - Full application configuration.
-/// * `token_cache` - Shared OAuth2 token cache, reused with the heartbeat loop.
-async fn run_speedtest_loop(cfg: Config, token_cache: TokenCache) {
+async fn run_speedtest_loop(cfg: Config) {
     let period = Duration::from_secs(cfg.speedtest.interval_minutes * SECONDS_PER_MINUTE);
     let mut ticker = interval(period);
 
     loop {
         ticker.tick().await;
-        if let Err(e) = run_speedtest_once(&cfg, &token_cache).await {
+        if let Err(e) = run_speedtest_once(&cfg).await {
             error!("Speedtest tick failed: {:?}", e);
         }
     }
 }
 
-/// Performs a single speedtest tick: run Ookla, authenticate, write to Firestore.
+/// Performs a single speedtest tick: run Ookla, post the result to the Ingest API.
 ///
 /// # Errors
-/// Returns an error if the speedtest binary fails, authentication fails, or
-/// the Firestore write fails.
-async fn run_speedtest_once(cfg: &Config, token_cache: &TokenCache) -> Result<()> {
+/// Returns an error if the speedtest binary fails or the Ingest API call fails.
+async fn run_speedtest_once(cfg: &Config) -> Result<()> {
     info!("Running speedtest...");
     let mut result = speedtest::run(&cfg.speedtest)?;
 
@@ -155,9 +147,8 @@ async fn run_speedtest_once(cfg: &Config, token_cache: &TokenCache) -> Result<()
         result.download_mbps, result.upload_mbps, result.ping_ms, result.external_ip_v4, result.external_ip_v6
     );
 
-    let token = firestore::get_cached_access_token(&cfg.gcp, token_cache).await?;
-    firestore::append_document(&cfg.gcp, &cfg.speedtest.collection, &token, &result).await?;
+    ingest::append_document(&cfg.ingest, &result).await?;
 
-    info!("Speedtest result written.");
+    info!("Speedtest result sent.");
     Ok(())
 }
