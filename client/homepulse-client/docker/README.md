@@ -39,10 +39,10 @@ working against the container's purpose.
 
 ## Config path inside the container
 
-`config.json` is bind-mounted read-only into the container. Its
-`gcp.service_account_key_path` field must point to the path **inside the
-container** (`/etc/homepulse/service-account.json`, as mounted in
-`docker-compose.yml`), not to the host's file path.
+`config.json` is bind-mounted read-only into the container. Since Fase 3 of
+the multi-tenant migration (ADR 0004), the client authenticates to the
+Ingest API with a per-household API key (`ingest.api_key`) instead of a GCP
+Service Account credential, so no key file needs to be mounted anymore.
 
 ## Usage
 

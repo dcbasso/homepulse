@@ -13,4 +13,3 @@ services:
       - CONFIG_PATH=/etc/homepulse/config.json
     volumes:
       - ../config.json:/etc/homepulse/config.json:ro
-      - ../deploy/<project-id>-sa.json:/etc/homepulse/service-account.json:ro

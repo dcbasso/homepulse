@@ -1,6 +1,5 @@
 use crate::config::SpeedtestConfig;
 use anyhow::{anyhow, bail, Context, Result};
-use chrono::{DateTime, Utc};
 use serde::Deserialize;
 use std::process::{Command, Stdio};
 use std::sync::mpsc;
@@ -51,7 +50,6 @@ struct RawResultLink {
 /// ready to be persisted to Firestore.
 #[derive(Debug)]
 pub struct SpeedtestResult {
-    pub timestamp: DateTime<Utc>,
     pub download_mbps: f64,
     pub upload_mbps: f64,
     pub ping_ms: f64,
@@ -117,7 +115,6 @@ pub fn run(config: &SpeedtestConfig) -> Result<SpeedtestResult> {
     let bytes_to_mbps = |bandwidth: u64| (bandwidth as f64 * 8.0) / 1_000_000.0;
 
     Ok(SpeedtestResult {
-        timestamp: Utc::now(),
         download_mbps: bytes_to_mbps(raw.download.bandwidth),
         upload_mbps: bytes_to_mbps(raw.upload.bandwidth),
         ping_ms: raw.ping.latency,
