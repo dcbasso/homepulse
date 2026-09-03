@@ -46,6 +46,14 @@ export const environment = {
 
 ---
 
+## Installing dependencies
+
+```bash
+npm install --legacy-peer-deps
+```
+
+The `--legacy-peer-deps` flag is required: `@angular/fire@20.0.1` (the latest stable release) only declares peer support for `@angular/core@^20.0.0`, while this project runs Angular 22. There is no stable `@angular/fire` release yet targeting Angular 22 (only pre-release `canary` tags) — plain `npm install` fails on this peer conflict until one ships. Revisit this once `@angular/fire` publishes stable Angular 22 support.
+
 ## Development server
 
 ```bash
@@ -81,6 +89,14 @@ ng generate component component-name
 
 ```bash
 ng test
+```
+
+## Running Firestore rules tests
+
+Cross-tenant isolation tests for `firestore.rules` (see `firestore-rules-tests/`), run against a real Firestore emulator — separate from `ng test` since these exercise the server-enforced rules directly, not Angular components:
+
+```bash
+npm run test:rules
 ```
 
 ## Additional resources
