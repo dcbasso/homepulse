@@ -9,6 +9,15 @@
 # requires editing this value, updating SETTINGS.FIXED_INTERVAL_INFO in the
 # three i18n files to match, and re-running `terraform apply` (or editing
 # manually in Console).
+#
+# Timeout limit as N grows (see ADR 0007): a single invocation of
+# check-internet-status (function.tf, timeout_seconds = 60) loops over every
+# active household sequentially — the invocation count stays constant at
+# ~1/minute regardless of N, but the per-invocation duration grows with N.
+# Monitor the function's execution duration in Cloud Monitoring; when it
+# approaches ~30s (half the timeout), revisit this design (parallelize the
+# per-household loop within the invocation, or fan out via Pub/Sub, per the
+# alternatives discussed in ADR 0007) rather than just raising timeout_seconds.
 # ---------------------------------------------------------------------------
 
 resource "google_cloud_scheduler_job" "check_internet_status" {

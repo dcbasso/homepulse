@@ -24,7 +24,8 @@ variable "whoami_region" {
 
 variable "alert_email" {
   type        = string
-  description = "Gmail address that receives up/down alert emails"
+  default     = ""
+  description = "Legacy fallback recipient for up/down alert emails, used only when a household has no `alert_emails` configured in its `monitor_config` (see ADR 0007/Fase 7 of ROADMAP.md — alert recipients are now per-household, not a single global variable). Optional; leave empty to disable the fallback."
 }
 
 variable "sa_email" {
