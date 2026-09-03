@@ -3,28 +3,31 @@ import { Router } from '@angular/router';
 import { Auth, GoogleAuthProvider, signInWithPopup, signOut, user } from '@angular/fire/auth';
 import type { User } from '@angular/fire/auth';
 import { Observable, from, switchMap, throwError } from 'rxjs';
-import { environment } from '../../environments/environment';
+import { HouseholdContextService } from './household-context.service';
 
 @Injectable({ providedIn: 'root' })
 export class AuthService {
   private auth = inject(Auth);
   private router = inject(Router);
+  private householdContext = inject(HouseholdContextService);
 
   /** Emits the currently authenticated user, or null when signed out. */
   currentUser$: Observable<User | null> = user(this.auth);
 
   /**
-   * Opens a Google Sign-In popup, verifies the email against the allowed list,
-   * and redirects to the dashboard on success or rejects with an error on denial.
+   * Opens a Google Sign-In popup, verifies the user is a member of at least
+   * one household (per ADR 0005 — access is granted only via manual
+   * allowlist, there is no self-signup), and redirects to the dashboard on
+   * success or rejects with an error on denial.
    *
-   * @returns Promise that resolves after a successful login and navigation.
-   * @throws Error with message 'ACCESS_DENIED' when the email is not allowed.
+   * @returns Observable that completes after a successful login and navigation.
+   * @throws Error with message 'ACCESS_DENIED' when the user has no household.
    */
   signInWithGoogle(): Observable<void> {
     return from(signInWithPopup(this.auth, new GoogleAuthProvider())).pipe(
-      switchMap((credential) => {
-        const email = credential.user.email ?? '';
-        if (email !== environment.allowedEmail) {
+      switchMap((credential) => this.householdContext.resolveMembershipsFor(credential.user)),
+      switchMap((memberships) => {
+        if (memberships.length === 0) {
           return from(signOut(this.auth)).pipe(
             switchMap(() => throwError(() => new Error('ACCESS_DENIED'))),
           );
