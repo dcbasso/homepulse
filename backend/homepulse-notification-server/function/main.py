@@ -38,10 +38,15 @@ _handler = logging.StreamHandler(sys.stdout)
 _handler.setLevel(logging.INFO)
 logger.addHandler(_handler)
 
+COLLECTION_HOUSEHOLDS = "households"
 COLLECTION_HEARTBEAT = "heartbeats"
 COLLECTION_STATE = "monitor_state"
 COLLECTION_CONFIG = "monitor_config"
 COLLECTION_INCIDENTS = "incidents"
+
+# Value of `households/{id}.status` that marks a household as eligible for
+# the periodic outage check. Mirrors ingest.py's HOUSEHOLD_STATUS_ACTIVE.
+HOUSEHOLD_STATUS_ACTIVE = "active"
 
 # Number of consecutive checks that must see a stale heartbeat before an
 # outage is confirmed and an alert is sent. Debounces single-sample false
@@ -154,19 +159,47 @@ def _get_firestore_client() -> firestore.Client:
     return firestore.Client(project=project_id, database=database)
 
 
-def _load_monitor_config(db: firestore.Client) -> MonitorConfig:
-    """Reads monitoring configuration from Firestore, falling back to env var defaults.
+def _household_ref(db: firestore.Client, household_id: str) -> firestore.DocumentReference:
+    """Returns the document reference for a household's root document.
+
+    Args:
+        db: Authenticated Firestore client.
+        household_id: ID of the household.
+
+    Returns:
+        Reference to `households/{household_id}`, the parent of every
+        household-scoped subcollection (heartbeats, monitor_state, etc.).
+    """
+    return db.collection(COLLECTION_HOUSEHOLDS).document(household_id)
+
+
+def _list_active_household_ids(db: firestore.Client) -> list[str]:
+    """Lists the IDs of every household eligible for the outage check.
+
+    Args:
+        db: Authenticated Firestore client.
+
+    Returns:
+        IDs of households whose `status` field equals HOUSEHOLD_STATUS_ACTIVE.
+    """
+    docs = db.collection(COLLECTION_HOUSEHOLDS).where("status", "==", HOUSEHOLD_STATUS_ACTIVE).stream()
+    return [doc.id for doc in docs]
+
+
+def _load_monitor_config(db: firestore.Client, household_id: str) -> MonitorConfig:
+    """Reads a household's monitoring configuration from Firestore, falling back to env var defaults.
 
     Applies lazy migration: if `alert_emails` is absent, falls back to the legacy
     `alert_email` field, then to the ALERT_EMAIL environment variable.
 
     Args:
         db: Authenticated Firestore client.
+        household_id: ID of the household to load configuration for.
 
     Returns:
         A MonitorConfig populated from Firestore or defaults.
     """
-    doc = db.collection(COLLECTION_CONFIG).document(CONFIG_DOC).get()
+    doc = _household_ref(db, household_id).collection(COLLECTION_CONFIG).document(CONFIG_DOC).get()
     if doc.exists:
         data = doc.to_dict()
         max_minutes = int(data.get("max_minutes_without_data", DEFAULT_MAX_MINUTES))
@@ -209,7 +242,7 @@ def _load_monitor_config(db: firestore.Client) -> MonitorConfig:
             date_format=data.get("date_format") or DEFAULT_DATE_FORMAT,
         )
 
-    logger.warning("monitor_config/current not found — using env var defaults")
+    logger.warning("households/%s/monitor_config/current not found — using env var defaults", household_id)
     max_minutes = int(os.environ.get("MAX_MINUTES_WITHOUT_DATA", DEFAULT_MAX_MINUTES))
     return MonitorConfig(
         max_minutes=max_minutes,
@@ -270,17 +303,19 @@ def _format_datetime(dt: datetime, tz_name: str, date_format: str) -> str:
         return dt.astimezone(tz).strftime(DEFAULT_DATE_FORMAT)
 
 
-def _get_latest_heartbeat_timestamp(db: firestore.Client) -> datetime | None:
-    """Queries the most recent heartbeat document from Firestore.
+def _get_latest_heartbeat_timestamp(db: firestore.Client, household_id: str) -> datetime | None:
+    """Queries a household's most recent heartbeat document from Firestore.
 
     Args:
         db: Authenticated Firestore client.
+        household_id: ID of the household to query.
 
     Returns:
         The UTC timestamp of the latest document, or None if the collection is empty.
     """
     docs = (
-        db.collection(COLLECTION_HEARTBEAT)
+        _household_ref(db, household_id)
+        .collection(COLLECTION_HEARTBEAT)
         .order_by("timestamp", direction=firestore.Query.DESCENDING)
         .limit(1)
         .stream()
@@ -295,11 +330,12 @@ def _get_latest_heartbeat_timestamp(db: firestore.Client) -> datetime | None:
     return None
 
 
-def _read_monitor_state(db: firestore.Client) -> tuple[bool, int]:
-    """Reads the current internet-down state from Firestore.
+def _read_monitor_state(db: firestore.Client, household_id: str) -> tuple[bool, int]:
+    """Reads a household's current internet-down state from Firestore.
 
     Args:
         db: Authenticated Firestore client.
+        household_id: ID of the household to read state for.
 
     Returns:
         A tuple of (internet_down, consecutive_down_checks). internet_down is
@@ -308,7 +344,7 @@ def _read_monitor_state(db: firestore.Client) -> tuple[bool, int]:
         row have seen a stale heartbeat without yet reaching
         DOWN_CONFIRMATION_CHECKS (used to debounce single-sample anomalies).
     """
-    doc = db.collection(COLLECTION_STATE).document(STATE_DOC).get()
+    doc = _household_ref(db, household_id).collection(COLLECTION_STATE).document(STATE_DOC).get()
     if doc.exists:
         data = doc.to_dict()
         return (
@@ -318,18 +354,21 @@ def _read_monitor_state(db: firestore.Client) -> tuple[bool, int]:
     return False, 0
 
 
-def _write_monitor_state(db: firestore.Client, internet_down: bool, consecutive_down_checks: int = 0) -> None:
+def _write_monitor_state(
+    db: firestore.Client, household_id: str, internet_down: bool, consecutive_down_checks: int = 0
+) -> None:
     """Persists a confirmed internet-down/up state transition to Firestore.
 
     Args:
         db: Authenticated Firestore client.
+        household_id: ID of the household to write state for.
         internet_down: True if the internet is now considered down.
         consecutive_down_checks: Value to store for the running debounce counter
             (0 on recovery, since the counter restarts from scratch afterwards).
     """
     now = datetime.now(timezone.utc)
     field_name = "last_down_alert_at" if internet_down else "last_recovery_alert_at"
-    db.collection(COLLECTION_STATE).document(STATE_DOC).set(
+    _household_ref(db, household_id).collection(COLLECTION_STATE).document(STATE_DOC).set(
         {
             "internet_down": internet_down,
             "consecutive_down_checks": consecutive_down_checks,
@@ -339,7 +378,7 @@ def _write_monitor_state(db: firestore.Client, internet_down: bool, consecutive_
     )
 
 
-def _write_down_check_counter(db: firestore.Client, consecutive_down_checks: int) -> None:
+def _write_down_check_counter(db: firestore.Client, household_id: str, consecutive_down_checks: int) -> None:
     """Persists the running count of consecutive stale-heartbeat checks.
 
     Used while a potential outage has not yet been confirmed (has not reached
@@ -347,45 +386,49 @@ def _write_down_check_counter(db: firestore.Client, consecutive_down_checks: int
 
     Args:
         db: Authenticated Firestore client.
+        household_id: ID of the household to write the counter for.
         consecutive_down_checks: The updated counter value.
     """
-    db.collection(COLLECTION_STATE).document(STATE_DOC).set(
+    _household_ref(db, household_id).collection(COLLECTION_STATE).document(STATE_DOC).set(
         {"consecutive_down_checks": consecutive_down_checks},
         merge=True,
     )
 
 
-def _create_incident(db: firestore.Client) -> str:
+def _create_incident(db: firestore.Client, household_id: str) -> str:
     """Creates a new incident document marking the start of an outage.
 
     Args:
         db: Authenticated Firestore client.
+        household_id: ID of the household the incident belongs to.
 
     Returns:
         The auto-generated document ID of the created incident.
     """
     now = datetime.now(timezone.utc)
-    _, ref = db.collection(COLLECTION_INCIDENTS).add(
+    _, ref = _household_ref(db, household_id).collection(COLLECTION_INCIDENTS).add(
         {"started_at": now, "recovered_at": None, "duration_minutes": None}
     )
     return ref.id
 
 
-def _close_latest_incident(db: firestore.Client) -> tuple[datetime | None, int | None]:
-    """Updates the most recent open incident with its recovery time and duration.
+def _close_latest_incident(db: firestore.Client, household_id: str) -> tuple[datetime | None, int | None]:
+    """Updates a household's most recent open incident with its recovery time and duration.
 
     Queries the most recent incident by started_at and closes it if still open.
     Avoids a composite index by filtering recovered_at in Python.
 
     Args:
         db: Authenticated Firestore client.
+        household_id: ID of the household the incident belongs to.
 
     Returns:
         A tuple of (started_at_utc, duration_minutes). Both are None if no open incident
         was found or the started_at field was missing.
     """
     docs = (
-        db.collection(COLLECTION_INCIDENTS)
+        _household_ref(db, household_id)
+        .collection(COLLECTION_INCIDENTS)
         .order_by("started_at", direction=firestore.Query.DESCENDING)
         .limit(1)
         .stream()
@@ -640,15 +683,133 @@ def _send_telegram_recovery_alert(
     _send_telegram_message(recipient["bot_token"], recipient["chat_id"], f"{subject}\n\n{body}")
 
 
+def _check_household(db: firestore.Client, household_id: str) -> None:
+    """Runs the outage check for a single household and sends alerts if needed.
+
+    Reads the household's latest heartbeat document, compares its timestamp
+    against the configured threshold, and sends Gmail and/or Telegram alerts
+    on state transitions (down→up or up→down). Incident documents are created
+    and closed accordingly. Alerts are sent to all configured recipients on
+    each enabled channel, with per-recipient name substitution.
+
+    Args:
+        db: Authenticated Firestore client.
+        household_id: ID of the household to check.
+    """
+    config = _load_monitor_config(db, household_id)
+
+    last_timestamp = _get_latest_heartbeat_timestamp(db, household_id)
+    if last_timestamp is None:
+        logger.warning("Household %s: no heartbeat documents found — skipping check", household_id)
+        return
+
+    now = datetime.now(timezone.utc)
+    diff_minutes = (now - last_timestamp).total_seconds() / 60
+
+    logger.info(
+        "Household %s: last record %s — %.1f min ago (threshold: %d min)",
+        household_id,
+        _format_datetime(last_timestamp, config.timezone, config.date_format),
+        diff_minutes,
+        config.max_minutes,
+    )
+
+    internet_was_down, consecutive_down_checks = _read_monitor_state(db, household_id)
+
+    if diff_minutes > config.max_minutes:
+        if internet_was_down:
+            logger.info("Household %s: internet still DOWN — no duplicate alert sent", household_id)
+        else:
+            consecutive_down_checks += 1
+            if consecutive_down_checks >= DOWN_CONFIRMATION_CHECKS:
+                logger.info("Household %s: internet appears DOWN — creating incident and sending alerts", household_id)
+                _create_incident(db, household_id)
+                _write_monitor_state(
+                    db, household_id, internet_down=True, consecutive_down_checks=consecutive_down_checks
+                )
+                if config.notify_on_down:
+                    try:
+                        for recipient in config.recipients:
+                            _send_down_alert(
+                                recipient=recipient,
+                                last_timestamp=last_timestamp,
+                                diff_minutes=diff_minutes,
+                                subject=config.subject_down,
+                                body_template=config.body_down,
+                                tz_name=config.timezone,
+                                date_format=config.date_format,
+                            )
+                    except Exception as e:
+                        logger.error("Household %s: email down-alert failed: %s", household_id, e)
+                if config.notify_telegram_on_down:
+                    try:
+                        for recipient in config.telegram_recipients:
+                            _send_telegram_down_alert(
+                                recipient=recipient,
+                                last_timestamp=last_timestamp,
+                                subject=config.subject_down,
+                                body_template=config.body_down,
+                                tz_name=config.timezone,
+                                date_format=config.date_format,
+                            )
+                    except Exception as e:
+                        logger.error("Household %s: Telegram down-alert failed: %s", household_id, e)
+            else:
+                logger.info(
+                    "Household %s: possible outage detected (%d/%d consecutive checks) — awaiting confirmation before alerting",
+                    household_id,
+                    consecutive_down_checks,
+                    DOWN_CONFIRMATION_CHECKS,
+                )
+                _write_down_check_counter(db, household_id, consecutive_down_checks)
+    else:
+        if internet_was_down:
+            logger.info("Household %s: internet is BACK — closing incident and sending recovery alerts", household_id)
+            started_at, duration_minutes = _close_latest_incident(db, household_id)
+            _write_monitor_state(db, household_id, internet_down=False, consecutive_down_checks=0)
+            if config.notify_on_recovery:
+                try:
+                    for recipient in config.recipients:
+                        _send_recovery_alert(
+                            recipient=recipient,
+                            recovery_timestamp=last_timestamp,
+                            started_at=started_at,
+                            duration_minutes=duration_minutes,
+                            subject=config.subject_up,
+                            body_template=config.body_up,
+                            tz_name=config.timezone,
+                            date_format=config.date_format,
+                        )
+                except Exception as e:
+                    logger.error("Household %s: email recovery-alert failed: %s", household_id, e)
+            if config.notify_telegram_on_recovery:
+                try:
+                    for recipient in config.telegram_recipients:
+                        _send_telegram_recovery_alert(
+                            recipient=recipient,
+                            recovery_timestamp=last_timestamp,
+                            started_at=started_at,
+                            duration_minutes=duration_minutes,
+                            subject=config.subject_up,
+                            body_template=config.body_up,
+                            tz_name=config.timezone,
+                            date_format=config.date_format,
+                        )
+                except Exception as e:
+                    logger.error("Household %s: Telegram recovery-alert failed: %s", household_id, e)
+        else:
+            if consecutive_down_checks:
+                _write_down_check_counter(db, household_id, 0)
+            logger.info("Household %s: internet is UP — nothing to do", household_id)
+
+
 @functions_framework.http
 def check_internet_status(request) -> tuple[str, int]:
-    """Check whether recent heartbeat data exists and send alerts if needed.
+    """Check every active household for a stale heartbeat and send alerts if needed.
 
-    Reads the latest document from Firestore, compares its timestamp against
-    the configured threshold, and sends Gmail and/or Telegram alerts on state
-    transitions (down→up or up→down). Incident documents are created and closed
-    accordingly. Alerts are sent to all configured recipients on each enabled
-    channel, with per-recipient name substitution.
+    Lists active households (per ADR 0007) and runs `_check_household` for
+    each one, isolating failures so that an error processing one household
+    does not abort the check for the others.
 
     Args:
         request: HTTP request object provided by Cloud Functions runtime.
@@ -658,107 +819,16 @@ def check_internet_status(request) -> tuple[str, int]:
     """
     try:
         db = _get_firestore_client()
-        config = _load_monitor_config(db)
+        household_ids = _list_active_household_ids(db)
+        if not household_ids:
+            logger.warning("No active households found — skipping check")
+            return "No active households", 200
 
-        last_timestamp = _get_latest_heartbeat_timestamp(db)
-        if last_timestamp is None:
-            logger.warning("No heartbeat documents found in Firestore — skipping check")
-            return "No data available", 200
-
-        now = datetime.now(timezone.utc)
-        diff_minutes = (now - last_timestamp).total_seconds() / 60
-
-        logger.info(
-            "Last record: %s — %.1f min ago (threshold: %d min)",
-            _format_datetime(last_timestamp, config.timezone, config.date_format),
-            diff_minutes,
-            config.max_minutes,
-        )
-
-        internet_was_down, consecutive_down_checks = _read_monitor_state(db)
-
-        if diff_minutes > config.max_minutes:
-            if internet_was_down:
-                logger.info("Internet still DOWN — no duplicate alert sent")
-            else:
-                consecutive_down_checks += 1
-                if consecutive_down_checks >= DOWN_CONFIRMATION_CHECKS:
-                    logger.info("Internet appears DOWN — creating incident and sending alerts")
-                    _create_incident(db)
-                    _write_monitor_state(db, internet_down=True, consecutive_down_checks=consecutive_down_checks)
-                    if config.notify_on_down:
-                        try:
-                            for recipient in config.recipients:
-                                _send_down_alert(
-                                    recipient=recipient,
-                                    last_timestamp=last_timestamp,
-                                    diff_minutes=diff_minutes,
-                                    subject=config.subject_down,
-                                    body_template=config.body_down,
-                                    tz_name=config.timezone,
-                                    date_format=config.date_format,
-                                )
-                        except Exception as e:
-                            logger.error("Email down-alert failed: %s", e)
-                    if config.notify_telegram_on_down:
-                        try:
-                            for recipient in config.telegram_recipients:
-                                _send_telegram_down_alert(
-                                    recipient=recipient,
-                                    last_timestamp=last_timestamp,
-                                    subject=config.subject_down,
-                                    body_template=config.body_down,
-                                    tz_name=config.timezone,
-                                    date_format=config.date_format,
-                                )
-                        except Exception as e:
-                            logger.error("Telegram down-alert failed: %s", e)
-                else:
-                    logger.info(
-                        "Possible outage detected (%d/%d consecutive checks) — awaiting confirmation before alerting",
-                        consecutive_down_checks,
-                        DOWN_CONFIRMATION_CHECKS,
-                    )
-                    _write_down_check_counter(db, consecutive_down_checks)
-        else:
-            if internet_was_down:
-                logger.info("Internet is BACK — closing incident and sending recovery alerts")
-                started_at, duration_minutes = _close_latest_incident(db)
-                _write_monitor_state(db, internet_down=False, consecutive_down_checks=0)
-                if config.notify_on_recovery:
-                    try:
-                        for recipient in config.recipients:
-                            _send_recovery_alert(
-                                recipient=recipient,
-                                recovery_timestamp=last_timestamp,
-                                started_at=started_at,
-                                duration_minutes=duration_minutes,
-                                subject=config.subject_up,
-                                body_template=config.body_up,
-                                tz_name=config.timezone,
-                                date_format=config.date_format,
-                            )
-                    except Exception as e:
-                        logger.error("Email recovery-alert failed: %s", e)
-                if config.notify_telegram_on_recovery:
-                    try:
-                        for recipient in config.telegram_recipients:
-                            _send_telegram_recovery_alert(
-                                recipient=recipient,
-                                recovery_timestamp=last_timestamp,
-                                started_at=started_at,
-                                duration_minutes=duration_minutes,
-                                subject=config.subject_up,
-                                body_template=config.body_up,
-                                tz_name=config.timezone,
-                                date_format=config.date_format,
-                            )
-                    except Exception as e:
-                        logger.error("Telegram recovery-alert failed: %s", e)
-            else:
-                if consecutive_down_checks:
-                    _write_down_check_counter(db, 0)
-                logger.info("Internet is UP — nothing to do")
+        for household_id in household_ids:
+            try:
+                _check_household(db, household_id)
+            except Exception as exc:
+                logger.exception("Household %s: unexpected error during check: %s", household_id, exc)
 
         return "OK", 200
 
@@ -807,21 +877,20 @@ def whoami(request) -> tuple[dict, int]:
     return {"ip": ip}, 200
 
 
-def _verify_caller(request) -> str | None:
+def _verify_firebase_token(request) -> dict | None:
     """Verifies the Firebase ID token in the request's Authorization header.
 
     Checks that the token is a valid, unexpired Firebase Auth token issued for
-    this project (GCP_PROJECT_ID) and belongs to the account allowed to manage
-    alerts (ALERT_EMAIL) — the same single-account restriction the frontend
-    already enforces at login, re-checked here because a client-side check
-    alone wouldn't stop someone from calling this endpoint directly with a
-    token for a different Google account.
+    this project (GCP_PROJECT_ID). Does not authorize the caller for any
+    specific household — callers must separately check membership with
+    `_is_household_member` before acting on a household's data (per ADR 0008).
 
     Args:
         request: HTTP request object provided by Cloud Functions runtime.
 
     Returns:
-        The verified caller's email if the token is valid and authorized, else None.
+        The verified token claims (includes 'sub' as uid and 'email'), or
+        None if the token is missing, malformed, or invalid.
     """
     auth_header = request.headers.get("Authorization", "")
     if not auth_header.startswith("Bearer "):
@@ -835,10 +904,35 @@ def _verify_caller(request) -> str | None:
         return None
     if claims is None or not claims.get("email_verified"):
         return None
-    email = claims.get("email")
-    if not email or email != os.environ.get("ALERT_EMAIL"):
-        return None
-    return email
+    return claims
+
+
+def _is_household_member(db: firestore.Client, household_id: str, uid: str, email: str | None) -> bool:
+    """Checks whether a Firebase user is a member of a household.
+
+    Matches by uid first, falling back to email, against the `members[]`
+    array on the household's root document (see ADR 0003). Returns False for
+    a nonexistent household as well as for a real household the caller isn't
+    a member of, so callers can return a uniform 403 without leaking whether
+    the household exists (per ADR 0008).
+
+    Args:
+        db: Authenticated Firestore client.
+        household_id: ID of the household to check membership against.
+        uid: Firebase Auth UID of the caller.
+        email: Email of the caller, or None if unavailable.
+
+    Returns:
+        True if the caller is a member of the household, else False.
+    """
+    doc = _household_ref(db, household_id).get()
+    if not doc.exists:
+        return False
+    data = doc.to_dict() or {}
+    for member in data.get("members", []):
+        if member.get("uid") == uid or (email and member.get("email") == email):
+            return True
+    return False
 
 
 @functions_framework.http
@@ -848,11 +942,12 @@ def send_test_alert(request) -> tuple:
     Lets the Settings screen preview a channel's current subject/body template,
     timezone, and date format before saving — filled with synthetic sample data
     instead of pulling a real incident from Firestore. Requires a valid Firebase
-    ID token (Authorization: Bearer <token>) for the ALERT_EMAIL account; see
-    _verify_caller.
+    ID token (Authorization: Bearer <token>) belonging to a member of the
+    target household; see _verify_firebase_token and _is_household_member.
 
     Args:
         request: HTTP request. JSON body:
+            household_id: ID of the household the caller must be a member of.
             channel: "email" or "telegram".
             subject: Subject line (email) — prefixed with TEST_ALERT_PREFIX.
             body_template: Body template with ${NAME}/${DATETIME_DOWN}/
@@ -868,11 +963,18 @@ def send_test_alert(request) -> tuple:
     if request.method == "OPTIONS":
         return "", 204, _CORS_HEADERS
 
-    caller_email = _verify_caller(request)
-    if caller_email is None:
+    claims = _verify_firebase_token(request)
+    if claims is None:
         return {"error": "Unauthorized"}, 401, _CORS_HEADERS
 
     payload = request.get_json(silent=True) or {}
+    household_id = payload.get("household_id")
+
+    db = _get_firestore_client()
+    if not household_id or not _is_household_member(db, household_id, claims.get("sub"), claims.get("email")):
+        return {"error": "Forbidden"}, 403, _CORS_HEADERS
+
+    caller_email = claims.get("email")
     channel = payload.get("channel")
     subject = str(payload.get("subject", ""))
     body_template = str(payload.get("body_template", ""))

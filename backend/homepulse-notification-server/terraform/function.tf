@@ -182,9 +182,12 @@ resource "google_cloud_run_service_iam_member" "whoami_invoker" {
 # email/Telegram alert with the draft (possibly unsaved) subject, body,
 # timezone, and date format. IAM allows unauthenticated invocation (needed so
 # the browser can call it directly), but the function itself only acts on
-# requests carrying a valid Firebase ID token for the ALERT_EMAIL account
-# (see _verify_caller in main.py) — the real access control lives in
-# application code here, not in IAM.
+# requests carrying a valid Firebase ID token for a member of the target
+# household (see _verify_firebase_token/_is_household_member in main.py) —
+# the real access control lives in application code here, not in IAM.
+# ALERT_EMAIL is unused by this endpoint's authorization (kept only as the
+# legacy alert-recipient fallback in _load_monitor_config); removing it from
+# this function's env is Fase 7 (terraform) scope, not this change.
 # ---------------------------------------------------------------------------
 
 resource "google_cloudfunctions2_function" "send_test_alert" {
