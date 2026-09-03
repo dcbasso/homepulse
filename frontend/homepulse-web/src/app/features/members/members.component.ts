@@ -12,8 +12,8 @@ import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { NavbarComponent } from '../../shared/navbar/navbar.component';
 import { AuthService } from '../../core/auth.service';
 import { HouseholdContextService } from '../../core/household-context.service';
-import { MembersDataService } from './members-data.service';
-import { HouseholdMember, HouseholdRole } from '../../core/models/household.model';
+import { MembersDataService, HouseholdMemberEntry } from './members-data.service';
+import { HouseholdRole } from '../../core/models/household.model';
 
 /** Roles that can be granted to a household member (see ADR 0003/0005). */
 const ASSIGNABLE_ROLES: HouseholdRole[] = ['owner', 'admin', 'member'];
@@ -48,7 +48,7 @@ const ASSIGNABLE_ROLES: HouseholdRole[] = ['owner', 'admin', 'member'];
           @if (members().length === 0) {
             <p class="empty-state">{{ 'MEMBERS.NO_MEMBERS' | translate }}</p>
           }
-          @for (member of members(); track member.email) {
+          @for (member of members(); track member.id) {
             <div class="member-row">
               <div class="member-info">
                 <mat-icon>person</mat-icon>
@@ -192,7 +192,7 @@ export class MembersComponent {
   readonly assignableRoles = ASSIGNABLE_ROLES;
 
   /** Current member list of the active household. */
-  members = signal<HouseholdMember[]>([]);
+  members = signal<HouseholdMemberEntry[]>([]);
 
   /** True while an add/remove request is in flight. */
   adding = signal(false);
@@ -245,7 +245,7 @@ export class MembersComponent {
    *
    * @param member - The member entry to remove.
    */
-  removeMember(member: HouseholdMember): void {
+  removeMember(member: HouseholdMemberEntry): void {
     this.removing.set(true);
     this.membersDataService.removeMember(member)
       .then(() => this.snackBar.open(this.translate.instant('MEMBERS.REMOVE_SUCCESS'), '', { duration: 3000 }))
