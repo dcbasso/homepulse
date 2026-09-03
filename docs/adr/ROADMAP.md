@@ -53,9 +53,23 @@ _Referências: [ADR 0004](0004-ingest-api-intermediaria-para-o-client-rust.md), 
 ## Fase 8 — Segurança e rollout
 _Referências: [ADR 0002](0002-multi-tenancy-particionada-por-household-em-projeto-gcp-unico.md), [0009](0009-migracao-de-dados-do-household-unico-existente.md), [0010](0010-rotacao-e-revogacao-de-api-keys-do-client.md)_
 
-- Testes de isolamento cross-tenant com Firestore emulator.
-- Rollout gradual mantendo dados antigos até validação completa.
-- Validar fluxo de rotação de API key sem downtime do client.
+- Testes de isolamento cross-tenant com Firestore emulator. **Feito** — `frontend/homepulse-web/firestore-rules-tests/isolation.spec.ts` (`npm run test:rules`), 17 testes contra o emulator real provando que um household não lê/escreve dados de outro via `firestore.rules`, incluindo a regra de `collectionGroup('members')`.
+- Validar fluxo de rotação de API key sem downtime do client. **Feito** — `backend/homepulse-notification-server/function/test_ingest.py` (`pytest`), 17 testes provando que duas chaves ativas simultâneas (janela de overlap do ADR 0010) autenticam corretamente e que revogar uma não afeta a outra nem outros households.
+- Rollout gradual mantendo dados antigos até validação completa. **Pendente** — plano abaixo.
+
+### Plano de rollout
+
+As Fases 1–7 já estão implementadas e mergeadas em `main`, mas a migração real (não dry-run) de `dcbasso@gmail.com` para o novo schema `households/{id}/...` foi deliberadamente adiada para o fim do roadmap (ver ADR 0009) — rodá-la antes disso deixaria o household único de produção num estado misto sem o restante da pilha pronta para lidar com ele. Ordem de execução em produção:
+
+1. **Confirmar infraestrutura implantada**: Terraform da Fase 7 aplicado (`terraform apply`), Cloud Functions da Fase 2 (`ingest-heartbeat`, `ingest-speedtest`) já respondendo — nenhuma delas depende de um household existir, então podem ir ao ar mesmo sem tráfego ainda.
+2. **Dry-run da migração** (`python migrate_to_households.py --owner-email dcbasso@gmail.com --dry-run`) contra o projeto de produção, conferindo que as contagens de documentos por coleção batem com o Firestore atual. Repetir sempre que os dados de produção mudarem significativamente, até a execução real.
+3. **Migração real** (sem `--dry-run`) — ponto de não-retorno operacional (ainda que reversível, ver passo 8): cria `households/{household_id}` com `dcbasso@gmail.com` como `owner` e recopia (não move) `speedtest_results`, `heartbeats`, `incidents`, `monitor_state/current`, `monitor_config/current` para as subcoleções novas. As coleções raiz antigas continuam intactas.
+4. **Emitir a primeira API key** (`issue_api_key.py`) para o `household_id` gerado no passo 3 e atualizar `client/homepulse-client`'s `config.json` na máquina doméstica (Fase 3) para apontar para a Ingest API. Confirmar no Firestore que novos heartbeats/speedtests estão chegando em `households/{household_id}/...` antes de prosseguir.
+5. **Deploy do frontend** (Fase 5) lendo de `households/{householdId}/...` — só depois do passo 3, já que `HouseholdContextService` depende do documento `members` existir para resolver o household ativo do usuário.
+6. **Deploy das novas `firestore.rules`** (Fase 6) — precisa ser sincronizado com o passo 5, não antes: as regras antigas liberavam as coleções raiz por e-mail fixo, as novas não cobrem mais essas coleções raiz (nenhuma regra = acesso negado por padrão). Publicar as duas mudanças na mesma janela evita uma janela em que o frontend em produção fica sem conseguir ler nada.
+7. **Período de validação** (sugestão: 48h–1 semana) monitorando: alertas de heartbeat/down-up funcionando via `_check_household` (Fase 4), duração de execução do `check-internet-status` no Cloud Monitoring (ver nota de timeout em `scheduler.tf`), e ausência de erros 401 na Ingest API (chave inválida).
+8. **Rollback**, caso necessário em qualquer ponto antes do passo 9: as coleções raiz antigas nunca são apagadas pelos passos acima, então basta reverter o deploy do frontend/rules para a versão anterior — os dados antigos continuam íntegros e completos.
+9. **Limpeza manual e explícita** das coleções raiz antigas — só depois de confirmado que nada mais as referencia (nenhum código em produção lê `speedtest_results`, `heartbeats`, `incidents`, `monitor_state`, `monitor_config` na raiz). Não automatizado deliberadamente (ver ADR 0009): é a única cópia de segurança até este ponto.
 
 ---
 

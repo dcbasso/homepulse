@@ -23,6 +23,9 @@ backend/homepulse-notification-server/scripts/client_secret.json
 
 # Firebase
 **/.firebase/
+**/firestore-debug.log
+**/firebase-debug.log
+**/ui-debug.log
 
 # Terraform — estado e variáveis locais
 **/terraform/terraform.tfvars
@@ -54,6 +57,10 @@ Thumbs.db
 # Python bytecode cache
 **/__pycache__/
 *.pyc
+
+# Python virtualenvs and test cache
+**/.venv/
+**/.pytest_cache/
 
 # Local deploy rules (contains real allowed-email substitution, never commit)
 .rules
