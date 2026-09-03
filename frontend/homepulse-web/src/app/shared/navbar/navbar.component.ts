@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { RouterLink, RouterLinkActive } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { BreakpointObserver } from '@angular/cdk/layout';
@@ -8,9 +8,12 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatSidenavModule } from '@angular/material/sidenav';
 import { MatListModule } from '@angular/material/list';
 import { MatDividerModule } from '@angular/material/divider';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatSelectModule } from '@angular/material/select';
 import { TranslatePipe } from '@ngx-translate/core';
 import { map } from 'rxjs';
 import { AuthService } from '../../core/auth.service';
+import { HouseholdContextService } from '../../core/household-context.service';
 
 /** Max viewport width, in pixels, at which the navbar switches to the drawer layout. */
 const MOBILE_BREAKPOINT = '(max-width: 768px)';
@@ -35,6 +38,8 @@ const MOBILE_BREAKPOINT = '(max-width: 768px)';
     MatSidenavModule,
     MatListModule,
     MatDividerModule,
+    MatFormFieldModule,
+    MatSelectModule,
     RouterLink,
     RouterLinkActive,
     TranslatePipe,
@@ -58,11 +63,25 @@ const MOBILE_BREAKPOINT = '(max-width: 768px)';
           <a mat-list-item routerLink="/settings" routerLinkActive="active-link" (click)="drawer.close()">
             {{ 'NAV.SETTINGS' | translate }}
           </a>
+          <a mat-list-item routerLink="/members" routerLinkActive="active-link" (click)="drawer.close()">
+            {{ 'NAV.MEMBERS' | translate }}
+          </a>
           <a mat-list-item routerLink="/about" routerLinkActive="active-link" (click)="drawer.close()">
             {{ 'NAV.ABOUT' | translate }}
           </a>
 
           <mat-divider />
+
+          @if (households().length > 1) {
+            <mat-form-field appearance="outline" class="household-select drawer-household-select">
+              <mat-label>{{ 'NAV.HOUSEHOLD' | translate }}</mat-label>
+              <mat-select [value]="activeHouseholdId()" (selectionChange)="selectHousehold($event.value)">
+                @for (household of households(); track household.id) {
+                  <mat-option [value]="household.id">{{ household.name }}</mat-option>
+                }
+              </mat-select>
+            </mat-form-field>
+          }
 
           <a mat-list-item routerLink="/preferences" routerLinkActive="active-link" (click)="drawer.close()">
             <mat-icon matListItemIcon>tune</mat-icon>
@@ -104,6 +123,9 @@ const MOBILE_BREAKPOINT = '(max-width: 768px)';
               <a mat-button routerLink="/settings" routerLinkActive="active-link">
                 {{ 'NAV.SETTINGS' | translate }}
               </a>
+              <a mat-button routerLink="/members" routerLinkActive="active-link">
+                {{ 'NAV.MEMBERS' | translate }}
+              </a>
               <a mat-button routerLink="/about" routerLinkActive="active-link">
                 {{ 'NAV.ABOUT' | translate }}
               </a>
@@ -111,6 +133,16 @@ const MOBILE_BREAKPOINT = '(max-width: 768px)';
           }
 
           <span class="spacer"></span>
+
+          @if (!isMobile() && households().length > 1) {
+            <mat-form-field appearance="outline" class="household-select">
+              <mat-select [value]="activeHouseholdId()" (selectionChange)="selectHousehold($event.value)">
+                @for (household of households(); track household.id) {
+                  <mat-option [value]="household.id">{{ household.name }}</mat-option>
+                }
+              </mat-select>
+            </mat-form-field>
+          }
 
           @if (!isMobile()) {
             <a mat-button routerLink="/preferences" routerLinkActive="active-link">
@@ -155,10 +187,20 @@ const MOBILE_BREAKPOINT = '(max-width: 768px)';
     .nav-links { display: flex; gap: 0.25rem; }
     .spacer { flex: 1; }
     .active-link { font-weight: 700; }
+    .household-select {
+      width: 180px;
+      margin: 0 0.75rem;
+    }
+    .household-select ::ng-deep .mat-mdc-form-field-subscript-wrapper { display: none; }
+    .drawer-household-select {
+      width: calc(100% - 2rem);
+      margin: 0.5rem 1rem;
+    }
   `],
 })
 export class NavbarComponent {
   private authService = inject(AuthService);
+  private householdContext = inject(HouseholdContextService);
   private breakpointObserver = inject(BreakpointObserver);
 
   /** True when the viewport is narrow enough to use the drawer layout instead of the inline toolbar. */
@@ -167,10 +209,25 @@ export class NavbarComponent {
     { initialValue: this.breakpointObserver.isMatched(MOBILE_BREAKPOINT) },
   );
 
+  /** Households the signed-in user belongs to — the selector only renders when there is more than one. */
+  protected households = this.householdContext.households;
+
+  /** Id of the currently active household. */
+  protected activeHouseholdId = computed(() => this.householdContext.activeHousehold()?.id ?? null);
+
   /**
    * Signs out the current user and navigates to the login screen.
    */
   signOut(): void {
     this.authService.signOut().subscribe();
+  }
+
+  /**
+   * Switches the active household context.
+   *
+   * @param householdId - Id of the household to make active.
+   */
+  selectHousehold(householdId: string): void {
+    this.householdContext.selectHousehold(householdId);
   }
 }
