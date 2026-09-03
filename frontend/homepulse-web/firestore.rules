@@ -1,17 +1,52 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /speedtest_results/{doc} {
-      allow read: if request.auth != null && request.auth.token.email == 'YOUR_ALLOWED_EMAIL';
+
+    // Lets a signed-in user discover which households they belong to via a
+    // collectionGroup query on `members`, filtered by their own uid or
+    // email (see HouseholdContextService.resolveMembershipsFor). Safe as a
+    // collection-group rule because it mirrors the query's own equality
+    // filter — it can never expose another user's member entry.
+    match /{path=**}/members/{memberId} {
+      allow read: if request.auth != null
+        && (resource.data.uid == request.auth.uid || resource.data.email == request.auth.token.email);
     }
-    match /heartbeats/{doc} {
-      allow read: if request.auth != null && request.auth.token.email == 'YOUR_ALLOWED_EMAIL';
-    }
-    match /incidents/{doc} {
-      allow read: if request.auth != null && request.auth.token.email == 'YOUR_ALLOWED_EMAIL';
-    }
-    match /monitor_config/{doc} {
-      allow read, write: if request.auth != null && request.auth.token.email == 'YOUR_ALLOWED_EMAIL';
+
+    match /households/{householdId} {
+      function isMember() {
+        return request.auth != null
+          && exists(/databases/$(database)/documents/households/$(householdId)/members/$(request.auth.uid));
+      }
+
+      function isOwnerOrAdmin() {
+        return isMember()
+          && get(/databases/$(database)/documents/households/$(householdId)/members/$(request.auth.uid)).data.role in ['owner', 'admin'];
+      }
+
+      allow read: if isMember();
+
+      // Membership changes (granting/revoking access) are restricted to
+      // owner/admin — enforced here, not just in the Members screen's UI.
+      match /members/{memberId} {
+        allow read: if isMember();
+        allow write: if isOwnerOrAdmin();
+      }
+
+      match /heartbeats/{doc} {
+        allow read: if isMember();
+      }
+
+      match /speedtest_results/{doc} {
+        allow read: if isMember();
+      }
+
+      match /incidents/{doc} {
+        allow read: if isMember();
+      }
+
+      match /monitor_config/{doc} {
+        allow read, write: if isMember();
+      }
     }
   }
 }
