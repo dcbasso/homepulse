@@ -1,13 +1,12 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { serverTimestamp } from '@angular/fire/firestore';
-import { Observable, firstValueFrom } from 'rxjs';
+import { Observable, firstValueFrom, switchMap, take } from 'rxjs';
 import { FirestoreService } from '../../core/firestore.service';
 import { AuthService } from '../../core/auth.service';
+import { HouseholdContextService } from '../../core/household-context.service';
 import { MonitorConfig, Recipient, TelegramRecipient } from '../../core/models/monitor-config.model';
 import { environment } from '../../../environments/environment';
-
-const CONFIG_PATH = 'monitor_config/current';
 
 /** Request payload accepted by the `send-test-alert` Cloud Function. */
 export interface TestAlertRequest {
@@ -23,24 +22,35 @@ export interface TestAlertRequest {
 export class SettingsDataService {
   private firestoreService = inject(FirestoreService);
   private authService = inject(AuthService);
+  private householdContext = inject(HouseholdContextService);
   private http = inject(HttpClient);
 
   /**
-   * Returns a real-time observable of the current monitor configuration.
-   * Emits `undefined` when the document does not exist in Firestore.
+   * Returns a real-time observable of the current monitor configuration for
+   * the active household. Emits `undefined` when the document does not exist.
    */
   getConfig(): Observable<MonitorConfig | undefined> {
-    return this.firestoreService.getDoc<MonitorConfig>(CONFIG_PATH);
+    return this.householdContext.activeHouseholdId$.pipe(
+      switchMap((householdId) =>
+        this.firestoreService.getDoc<MonitorConfig>(`households/${householdId}/monitor_config/current`),
+      ),
+    );
   }
 
   /**
-   * Persists the monitor configuration to Firestore with a server-side timestamp.
+   * Persists the monitor configuration for the active household to Firestore
+   * with a server-side timestamp.
    *
    * @param config - Configuration values to write (updated_at is appended automatically).
    * @returns Promise that resolves when the write is committed.
+   * @throws Error when there is no active household.
    */
-  saveConfig(config: Omit<MonitorConfig, 'updated_at'>): Promise<void> {
-    return this.firestoreService.setDoc(CONFIG_PATH, {
+  async saveConfig(config: Omit<MonitorConfig, 'updated_at'>): Promise<void> {
+    const householdId = await firstValueFrom(this.householdContext.activeHouseholdId$.pipe(take(1)));
+    if (!householdId) {
+      throw new Error('No active household');
+    }
+    return this.firestoreService.setDoc(`households/${householdId}/monitor_config/current`, {
       ...config,
       updated_at: serverTimestamp(),
     });
@@ -53,17 +63,23 @@ export class SettingsDataService {
    *
    * @param request - Channel, template, and recipient values to test with.
    * @returns Promise resolving to the number of recipients the test was sent to.
-   * @throws Error when the caller is not signed in, or the Cloud Function rejects the request.
+   * @throws Error when the caller is not signed in, there is no active household,
+   *   or the Cloud Function rejects the request.
    */
   async sendTestAlert(request: TestAlertRequest): Promise<number> {
     const idToken = await this.authService.getIdToken();
     if (!idToken) {
       throw new Error('Not signed in');
     }
+    const householdId = await firstValueFrom(this.householdContext.activeHouseholdId$.pipe(take(1)));
+    if (!householdId) {
+      throw new Error('No active household');
+    }
     const response = await firstValueFrom(
       this.http.post<{ ok: boolean; sent: number }>(
         environment.testAlertFunctionUrl,
         {
+          household_id: householdId,
           channel: request.channel,
           subject: request.subject,
           body_template: request.bodyTemplate,
