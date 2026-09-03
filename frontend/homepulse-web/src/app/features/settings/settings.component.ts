@@ -13,7 +13,7 @@ import {
   signal,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { merge, take } from 'rxjs';
+import { combineLatest, merge, take } from 'rxjs';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatCheckboxModule } from '@angular/material/checkbox';
@@ -29,8 +29,8 @@ import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { Timestamp } from '@angular/fire/firestore';
 import { NavbarComponent } from '../../shared/navbar/navbar.component';
 import { SettingsDataService, TestAlertRequest } from './settings-data.service';
+import { AuthService } from '../../core/auth.service';
 import { MonitorConfig, Recipient, TelegramRecipient } from '../../core/models/monitor-config.model';
-import { environment } from '../../../environments/environment';
 import { TelegramHelpDialogComponent } from './components/telegram-help-dialog/telegram-help-dialog.component';
 import { formatPreview } from './date-format-preview.util';
 
@@ -154,10 +154,10 @@ function formatTimestamp(ts: Timestamp): string {
  *
  * @param config - The config document loaded from Firestore.
  */
-function buildRecipients(config: MonitorConfig): Recipient[] {
+function buildRecipients(config: MonitorConfig, fallbackEmail: string): Recipient[] {
   const emails = config.alert_emails?.length
     ? config.alert_emails
-    : config.alert_email ? [config.alert_email] : [environment.allowedEmail];
+    : config.alert_email ? [config.alert_email] : [fallbackEmail];
   const names = config.recipient_names ?? {};
   return emails.map(email => ({ email, name: names[email] ?? '' }));
 }
@@ -757,6 +757,7 @@ function maskBotToken(token: string): string {
 })
 export class SettingsComponent implements OnInit {
   private dataService = inject(SettingsDataService);
+  private authService = inject(AuthService);
   private fb          = inject(FormBuilder);
   private snackBar    = inject(MatSnackBar);
   private translate   = inject(TranslateService);
@@ -866,13 +867,14 @@ export class SettingsComponent implements OnInit {
    * Applies lazy migration from the legacy `alert_email` field when `alert_emails` is absent.
    */
   ngOnInit(): void {
-    this.dataService.getConfig().pipe(
+    combineLatest([this.dataService.getConfig(), this.authService.currentUser$]).pipe(
       take(1),
       takeUntilDestroyed(this.destroyRef),
-    ).subscribe(config => {
+    ).subscribe(([config, currentUser]) => {
+      const fallbackEmail = currentUser?.email ?? '';
       const recipientList = config
-        ? buildRecipients(config)
-        : [{ email: environment.allowedEmail, name: '' }];
+        ? buildRecipients(config, fallbackEmail)
+        : [{ email: fallbackEmail, name: '' }];
 
       this.recipients.set(recipientList);
       this.savedRecipients = [...recipientList];
