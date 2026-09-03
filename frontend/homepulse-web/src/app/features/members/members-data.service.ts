@@ -1,15 +1,20 @@
 import { Injectable, inject } from '@angular/core';
-import { Firestore, arrayRemove, arrayUnion, doc, updateDoc } from '@angular/fire/firestore';
-import { Observable, firstValueFrom, map, switchMap, take } from 'rxjs';
+import { Firestore, deleteDoc, doc, setDoc } from '@angular/fire/firestore';
+import { Observable, firstValueFrom, switchMap, take } from 'rxjs';
 import { FirestoreService } from '../../core/firestore.service';
 import { HouseholdContextService } from '../../core/household-context.service';
-import { Household, HouseholdMember, HouseholdRole } from '../../core/models/household.model';
+import { HouseholdMember, HouseholdRole } from '../../core/models/household.model';
+
+/** A household member as read from the `members` subcollection, including its document id. */
+export type HouseholdMemberEntry = HouseholdMember & { id: string };
 
 /**
- * Manages the `members[]` array on the active household's root document
- * (see ADR 0003). Membership is a manually administered allowlist (see ADR
- * 0005) — there is no self-signup, so adding a member here is what grants
- * them access.
+ * Manages the `households/{householdId}/members` subcollection (see ADR
+ * 0006). Membership is a manually administered allowlist (see ADR 0005) —
+ * there is no self-signup, so adding a member here is what grants them
+ * access. A newly added member's document is keyed by email until their
+ * first login, at which point {@link HouseholdContextService} claims it
+ * under their `uid` (required for `firestore.rules`'s `exists()` check).
  */
 @Injectable({ providedIn: 'root' })
 export class MembersDataService {
@@ -20,19 +25,17 @@ export class MembersDataService {
   /**
    * Returns a real-time observable of the active household's member list.
    */
-  getMembers(): Observable<HouseholdMember[]> {
+  getMembers(): Observable<HouseholdMemberEntry[]> {
     return this.householdContext.activeHouseholdId$.pipe(
-      switchMap((householdId) => this.firestoreService.getDoc<Household>(`households/${householdId}`)),
-      map((household) => household?.members ?? []),
+      switchMap((householdId) =>
+        this.firestoreService.getCollection<HouseholdMemberEntry>(`households/${householdId}/members`),
+      ),
     );
   }
 
   /**
-   * Adds a new member to the active household by email.
-   *
-   * The member's `uid` is left empty until they sign in for the first time —
-   * {@link HouseholdContextService.resolveMembershipsFor} falls back to
-   * matching by email for members without a resolved uid yet.
+   * Adds a new member to the active household by email, keyed by that email
+   * until the member signs in for the first time.
    *
    * @param email - Email address of the person to grant access to.
    * @param role - Role to assign to the new member.
@@ -41,22 +44,18 @@ export class MembersDataService {
   async addMember(email: string, role: HouseholdRole): Promise<void> {
     const householdId = await this.requireActiveHouseholdId();
     const member: HouseholdMember = { uid: '', email, role };
-    await updateDoc(doc(this.firestore, `households/${householdId}`), {
-      members: arrayUnion(member),
-    });
+    await setDoc(doc(this.firestore, `households/${householdId}/members/${email}`), member);
   }
 
   /**
    * Removes a member from the active household, revoking their access.
    *
-   * @param member - The exact member entry to remove, as read from {@link getMembers}.
+   * @param member - The member entry to remove, as read from {@link getMembers}.
    * @throws Error when there is no active household.
    */
-  async removeMember(member: HouseholdMember): Promise<void> {
+  async removeMember(member: HouseholdMemberEntry): Promise<void> {
     const householdId = await this.requireActiveHouseholdId();
-    await updateDoc(doc(this.firestore, `households/${householdId}`), {
-      members: arrayRemove(member),
-    });
+    await deleteDoc(doc(this.firestore, `households/${householdId}/members/${member.id}`));
   }
 
   private async requireActiveHouseholdId(): Promise<string> {
