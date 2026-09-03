@@ -87,7 +87,14 @@ def _create_household_doc(
     owner_uid: str | None,
     dry_run: bool,
 ) -> None:
-    """Creates (or overwrites) the `households/{household_id}` root document.
+    """Creates (or overwrites) the `households/{household_id}` root document
+    and its owner entry in the `members` subcollection (see ADR 0006).
+
+    The member document is keyed by `owner_uid` when known, so
+    `firestore.rules`'s `exists(.../members/$(request.auth.uid))` check
+    authorizes the owner immediately. If `owner_uid` is not supplied, it is
+    keyed by email instead and reconciled to the uid on the owner's first
+    login, matching `HouseholdContextService.resolveMembershipsFor`.
 
     Args:
         db: Authenticated Firestore client.
@@ -96,16 +103,22 @@ def _create_household_doc(
         owner_uid: Firebase Auth UID of the owner, if known. None if not supplied.
         dry_run: If True, logs the intended write without performing it.
     """
-    data = {
-        "name": "Default household",
-        "status": "active",
-        "members": [{"uid": owner_uid, "email": owner_email, "role": "owner"}],
-        "api_keys": [],
-    }
+    data = {"name": "Default household", "status": "active", "api_keys": []}
+    member_id = owner_uid or owner_email
+    member_data = {"uid": owner_uid or "", "email": owner_email, "role": "owner"}
+
     if dry_run:
         logger.info("[dry-run] Would create households/%s with %s", household_id, data)
+        logger.info(
+            "[dry-run] Would create households/%s/members/%s with %s",
+            household_id, member_id, member_data,
+        )
         return
+
     db.collection("households").document(household_id).set(data)
+    db.collection("households").document(household_id).collection("members").document(
+        member_id
+    ).set(member_data)
     logger.info("Created households/%s (owner: %s)", household_id, owner_email)
 
 
