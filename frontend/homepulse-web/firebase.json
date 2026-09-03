@@ -1,7 +1,8 @@
 {
   "firestore": {
     "database": "speedtest-monitordb-one",
-    "rules": "firestore.rules"
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
   },
   "hosting": {
     "public": "dist/web/browser",
@@ -20,6 +21,9 @@
   "emulators": {
     "dataconnect": {
       "dataDir": "dataconnect/.dataconnect/pgliteData"
+    },
+    "firestore": {
+      "port": 8080
     }
   },
   "dataconnect": {
