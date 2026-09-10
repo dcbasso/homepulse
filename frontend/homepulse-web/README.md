@@ -4,7 +4,7 @@ Angular 22 dashboard for the speedtest monitor, connected to Firebase/Firestore.
 
 ## First-time setup
 
-The Firebase environment files are **not tracked in git** to avoid exposing credentials in a public repository. You need to provide them before running or building the app.
+The Firebase environment files and `.firebaserc` are **not tracked in git** to avoid exposing credentials and the real project id in a public repository. You need to provide them before running or building the app.
 
 ### If you have access to the `deploy/` folder (owner)
 
@@ -23,9 +23,10 @@ This copies `deploy/environment.ts` and `deploy/environment.prod.ts` to `src/env
 ```bash
 cp src/environments/environment.example.ts      src/environments/environment.ts
 cp src/environments/environment.prod.example.ts src/environments/environment.prod.ts
+cp .firebaserc.example                           .firebaserc
 ```
 
-2. Fill in your Firebase project values in both files. You can find them in the [Firebase Console](https://console.firebase.google.com/) → Project Settings → Your apps → Web app config:
+2. Fill in your Firebase project values in both files, and your project id in `.firebaserc`. You can find them in the [Firebase Console](https://console.firebase.google.com/) → Project Settings → Your apps → Web app config:
 
 ```typescript
 export const environment = {

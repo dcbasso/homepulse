@@ -39,6 +39,9 @@ backend/homepulse-notification-server/scripts/client_secret.json
 frontend/homepulse-web/src/environments/environment.ts
 frontend/homepulse-web/src/environments/environment.prod.ts
 
+# Aponta para o project id real do Firebase — commitar apenas o .example
+frontend/homepulse-web/.firebaserc
+
 # Env files
 .env
 *.env
