@@ -4,7 +4,7 @@ Status: Proposto
 
 ## Contexto
 
-Hoje o client Rust (`client/homepulse-client/`) autentica diretamente no Firestore usando uma chave de Service Account JSON local (`config.rs::ServiceAccountKey`, ex. `client/homepulse-client/deploy/speedtest-monitor-b5cd2-sa.json`), assinando um JWT RS256 e trocando por um access token OAuth2 com escopo `datastore` (`firestore.rs::get_access_token`), depois gravando via POST direto na Firestore REST API (`append_document`, `append_heartbeat`).
+Hoje o client Rust (`client/homepulse-client/`) autentica diretamente no Firestore usando uma chave de Service Account JSON local (`config.rs::ServiceAccountKey`, ex. `client/homepulse-client/deploy/<project-id>-sa.json`), assinando um JWT RS256 e trocando por um access token OAuth2 com escopo `datastore` (`firestore.rs::get_access_token`), depois gravando via POST direto na Firestore REST API (`append_document`, `append_heartbeat`).
 
 Em um modelo multi-household, isso significaria distribuir uma chave de Service Account real do GCP — com escopo de escrita no Firestore — para cada máquina doméstica de cada usuário. Isso é operacionalmente pesado (gerar, entregar e revogar N chaves de Service Account) e um risco de segurança maior que o necessário: uma chave de Service Account vazada dá acesso amplo ao Firestore, não apenas ao household daquele usuário, a menos que se configure IAM granular por Service Account — o que multiplica ainda mais a complexidade de gestão.
 

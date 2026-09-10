@@ -4,7 +4,7 @@ Status: Proposto
 
 ## Contexto
 
-Hoje o HomePulse é, na prática, single-tenant: um projeto GCP inteiro (`speedtest-monitor-b5cd2`), um banco Firestore nomeado (`speedtest-monitordb-one`), uma Service Account, um Cloud Scheduler e três Cloud Functions atendem exatamente um usuário/uma casa. Isso é visível em:
+Hoje o HomePulse é, na prática, single-tenant: um projeto GCP inteiro (`<project-id>`), um banco Firestore nomeado (`speedtest-monitordb-one`), uma Service Account, um Cloud Scheduler e três Cloud Functions atendem exatamente um usuário/uma casa. Isso é visível em:
 
 - `frontend/homepulse-web/firestore.rules` — todas as regras comparam `request.auth.token.email` a um literal fixo.
 - `backend/homepulse-notification-server/function/main.py::_verify_caller` — mesma checagem, contra a env var `ALERT_EMAIL`.

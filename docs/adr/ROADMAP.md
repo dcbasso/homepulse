@@ -20,7 +20,7 @@ _Referência: [ADR 0004](0004-ingest-api-intermediaria-para-o-client-rust.md)_
 
 - `client/homepulse-client/src/config.rs`: substituir `FirestoreConfig{service_account_key_path, project_id}` por `IngestConfig{api_key, household_id, ingest_url}`.
 - `client/homepulse-client/src/firestore.rs` (renomear para `ingest.rs`): remover JWT/OAuth2 (`jsonwebtoken`, `get_access_token`, cache de token); `append_document`/`append_heartbeat` viram chamadas HTTP simples.
-- Remover `client/homepulse-client/deploy/speedtest-monitor-b5cd2-sa.json` do fluxo de deploy.
+- Remover `client/homepulse-client/deploy/<project-id>-sa.json` do fluxo de deploy.
 
 ## Fase 4 — Backend de alertas
 _Referências: [ADR 0007](0007-scheduler-multi-household-e-limite-do-check-de-status.md), [0008](0008-autenticacao-por-household-em-todos-os-endpoints-da-api.md)_
