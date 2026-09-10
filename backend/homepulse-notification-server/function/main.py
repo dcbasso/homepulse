@@ -26,6 +26,7 @@ from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
 
 from email_template import build_html_email
+from ingest import ingest_heartbeat, ingest_speedtest  # noqa: F401 -- re-exported as Cloud Function entry points
 
 # The Cloud Run Python runtime pre-configures the root logger with its own
 # handler, making `logging.basicConfig()` a no-op (it only takes effect when

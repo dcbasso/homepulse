@@ -27,9 +27,20 @@ service cloud.firestore {
 
       // Membership changes (granting/revoking access) are restricted to
       // owner/admin — enforced here, not just in the Members screen's UI.
+      //
+      // Exception: a signed-in user may create their own uid-keyed member
+      // doc without already being owner/admin, but only when an existing
+      // email-keyed doc for their own address is already present in this
+      // household — i.e. claiming an invitation placed by an admin (or by
+      // the one-shot migration script, ADR 0009), never self-elevating.
+      // See HouseholdContextService.claimMembership.
       match /members/{memberId} {
         allow read: if isMember();
-        allow write: if isOwnerOrAdmin();
+        allow write: if isOwnerOrAdmin()
+          || (request.auth != null
+              && request.auth.uid == memberId
+              && request.auth.token.email != null
+              && exists(/databases/$(database)/documents/households/$(householdId)/members/$(request.auth.token.email)));
       }
 
       match /heartbeats/{doc} {
