@@ -16,6 +16,17 @@
         "source": "**",
         "destination": "/index.html"
       }
+    ],
+    "headers": [
+      {
+        "source": "/downloads/**",
+        "headers": [
+          {
+            "key": "Content-Disposition",
+            "value": "attachment"
+          }
+        ]
+      }
     ]
   },
   "emulators": {

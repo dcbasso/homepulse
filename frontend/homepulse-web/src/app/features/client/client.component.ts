@@ -50,7 +50,7 @@ import { ApiKeyDialogComponent } from './components/api-key-dialog/api-key-dialo
           <mat-tab-group>
             <mat-tab [label]="'CLIENT.TAB_LINUX' | translate">
               <div class="tab-content">
-                <a mat-raised-button color="primary" [href]="release.downloadUrl">
+                <a mat-raised-button color="primary" [href]="release.downloadUrl" download="homepulse-client-linux-x86_64">
                   <mat-icon>download</mat-icon>
                   {{ 'CLIENT.DOWNLOAD' | translate }} (v{{ release.version }})
                 </a>
