@@ -180,6 +180,7 @@
         "NO_MEMBERS": "No members found",
         "ADD_SUCCESS": "Member added successfully",
         "REMOVE_SUCCESS": "Member removed successfully",
+        "ROLE_UPDATE_SUCCESS": "Role updated successfully",
         "ERROR": "Something went wrong. Please try again."
     },
     "ABOUT": {

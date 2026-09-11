@@ -1,4 +1,4 @@
-import { Injectable, inject } from '@angular/core';
+import { Injectable, computed, inject } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { Auth, user } from '@angular/fire/auth';
 import type { User } from '@angular/fire/auth';
@@ -74,6 +74,12 @@ export class HouseholdContextService {
 
   /** Signal form of {@link activeHousehold$}, for template bindings. */
   readonly activeHousehold = toSignal(this.activeHousehold$, { initialValue: null as HouseholdMembership | null });
+
+  /** True when the signed-in user is an `owner` or `admin` of the active household. */
+  readonly canManageActiveHousehold = computed(() => {
+    const role = this.activeHousehold()?.role;
+    return role === 'owner' || role === 'admin';
+  });
 
   /**
    * Resolves the household memberships for a given Firebase user directly,

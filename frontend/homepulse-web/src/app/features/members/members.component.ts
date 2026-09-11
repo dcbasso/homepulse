@@ -56,7 +56,21 @@ const ASSIGNABLE_ROLES: HouseholdRole[] = ['owner', 'admin', 'member'];
                 @if (member.email === currentUserEmail()) {
                   <span class="you-badge">{{ 'MEMBERS.YOU' | translate }}</span>
                 }
-                <span class="member-role">{{ 'MEMBERS.ROLE_' + member.role.toUpperCase() | translate }}</span>
+                @if (canManage() && member.email !== currentUserEmail()) {
+                  <mat-form-field appearance="outline" class="role-select">
+                    <mat-select
+                      [value]="member.role"
+                      [disabled]="changingRole()"
+                      (selectionChange)="changeRole(member, $event.value)"
+                    >
+                      @for (role of assignableRoles; track role) {
+                        <mat-option [value]="role">{{ 'MEMBERS.ROLE_' + role.toUpperCase() | translate }}</mat-option>
+                      }
+                    </mat-select>
+                  </mat-form-field>
+                } @else {
+                  <span class="member-role">{{ 'MEMBERS.ROLE_' + member.role.toUpperCase() | translate }}</span>
+                }
               </div>
               @if (canManage()) {
                 <button
@@ -163,6 +177,11 @@ const ASSIGNABLE_ROLES: HouseholdRole[] = ['owner', 'admin', 'member'];
       text-transform: capitalize;
     }
 
+    .role-select {
+      width: 140px;
+    }
+    .role-select ::ng-deep .mat-mdc-form-field-subscript-wrapper { display: none; }
+
     .add-form {
       display: flex;
       align-items: flex-start;
@@ -197,6 +216,7 @@ export class MembersComponent {
   /** True while an add/remove request is in flight. */
   adding = signal(false);
   removing = signal(false);
+  changingRole = signal(false);
 
   /** Email of the signed-in user, used to badge their own row. */
   currentUserEmail = signal<string | null>(null);
@@ -238,6 +258,21 @@ export class MembersComponent {
       })
       .catch(() => this.snackBar.open(this.translate.instant('MEMBERS.ERROR'), '', { duration: 3000 }))
       .finally(() => this.adding.set(false));
+  }
+
+  /**
+   * Changes the role of an existing member of the active household.
+   *
+   * @param member - The member entry to update.
+   * @param role - The new role to assign to the member.
+   */
+  changeRole(member: HouseholdMemberEntry, role: HouseholdRole): void {
+    if (role === member.role) return;
+    this.changingRole.set(true);
+    this.membersDataService.updateMemberRole(member, role)
+      .then(() => this.snackBar.open(this.translate.instant('MEMBERS.ROLE_UPDATE_SUCCESS'), '', { duration: 3000 }))
+      .catch(() => this.snackBar.open(this.translate.instant('MEMBERS.ERROR'), '', { duration: 3000 }))
+      .finally(() => this.changingRole.set(false));
   }
 
   /**
