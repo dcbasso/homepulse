@@ -24,6 +24,7 @@
         "MENU": "Menu",
         "PREFERENCES": "Prefer\u00eancias",
         "MEMBERS": "Membros",
+        "CLIENT": "Client",
         "HOUSEHOLD": "Resid\u00eancia"
     },
     "PREFERENCES": {
@@ -181,7 +182,34 @@
         "ADD_SUCCESS": "Membro adicionado com sucesso",
         "REMOVE_SUCCESS": "Membro removido com sucesso",
         "ROLE_UPDATE_SUCCESS": "Papel atualizado com sucesso",
-        "ERROR": "Algo deu errado. Tente novamente."
+        "ERROR": "Algo deu errado. Tente novamente.",
+        "INVITE": "Enviar convite",
+        "INVITE_SUCCESS": "Convite enviado com sucesso",
+        "INVITE_ERROR": "Não foi possível enviar o convite. Tente novamente."
+    },
+    "CLIENT": {
+        "TITLE": "Cliente de monitoramento",
+        "GENERATE_KEY": "Gerar nova API key",
+        "GENERATE_KEY_ERROR": "Não foi possível gerar a chave. Tente novamente.",
+        "KEY_DIALOG_TITLE": "Sua nova API key",
+        "KEY_WARNING": "Copie esta chave agora — ela não pode ser recuperada depois.",
+        "COPY": "Copiar",
+        "COPIED": "Copiado!",
+        "CLOSE": "Fechar",
+        "HOUSEHOLD_ID_LABEL": "ID da residência",
+        "TAB_LINUX": "Standalone Linux",
+        "TAB_WINDOWS": "Windows",
+        "TAB_DEBIAN": "Debian/Ubuntu",
+        "TAB_ARCH": "Arch",
+        "COMING_SOON": "Em breve",
+        "DOWNLOAD": "Baixar binário",
+        "NO_RELEASE_YET": "Ainda não há nenhuma versão publicada do client para download.",
+        "INSTALL_STEPS_TITLE": "Instalação como serviço (systemd)",
+        "INSTALL_STEP_1": "Baixe o binário acima e dê permissão de execução: chmod +x homepulse-client",
+        "INSTALL_STEP_2": "Mova para /usr/local/bin/homepulse-client",
+        "INSTALL_STEP_3": "Gere sua API key acima e crie /etc/homepulse-client/config.json com o ID da residência e a chave",
+        "INSTALL_STEP_4": "Instale a unit systemd (homepulse-client.service) e habilite/inicie o serviço",
+        "INSTALL_DOCS_LINK": "Ver instruções completas no README do client"
     },
     "ABOUT": {
         "TITLE": "Sobre",

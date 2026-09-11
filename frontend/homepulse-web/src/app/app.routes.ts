@@ -47,6 +47,12 @@ export const routes: Routes = [
     canActivate: [authGuard, householdGuard],
   },
   {
+    path: 'client',
+    loadComponent: () =>
+      import('./features/client/client.component').then((m) => m.ClientComponent),
+    canActivate: [authGuard, householdGuard],
+  },
+  {
     path: 'preferences',
     loadComponent: () =>
       import('./features/preferences/preferences.component').then((m) => m.PreferencesComponent),
