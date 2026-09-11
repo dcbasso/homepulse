@@ -50,14 +50,10 @@ import { ApiKeyDialogComponent } from './components/api-key-dialog/api-key-dialo
           <mat-tab-group>
             <mat-tab [label]="'CLIENT.TAB_LINUX' | translate">
               <div class="tab-content">
-                @if (release()) {
-                  <a mat-raised-button color="primary" [href]="release()!.downloadUrl">
-                    <mat-icon>download</mat-icon>
-                    {{ 'CLIENT.DOWNLOAD' | translate }} (v{{ release()!.version }})
-                  </a>
-                } @else {
-                  <p class="empty-state">{{ 'CLIENT.NO_RELEASE_YET' | translate }}</p>
-                }
+                <a mat-raised-button color="primary" [href]="release.downloadUrl">
+                  <mat-icon>download</mat-icon>
+                  {{ 'CLIENT.DOWNLOAD' | translate }} (v{{ release.version }})
+                </a>
 
                 <h3>{{ 'CLIENT.INSTALL_STEPS_TITLE' | translate }}</h3>
                 <ol class="install-steps">
@@ -151,15 +147,13 @@ export class ClientComponent {
   /** True while an API key generation request is in flight. */
   generatingKey = signal(false);
 
-  /** Latest published homepulse-client Linux release, or null if none exists yet. */
-  release = signal<ClientRelease | null>(null);
+  /** The homepulse-client Linux build bundled with this deploy. */
+  release: ClientRelease = this.clientDataService.getLinuxRelease();
 
   constructor() {
     this.householdContext.activeHousehold$.pipe(
       takeUntilDestroyed(this.destroyRef),
     ).subscribe((household) => this.householdId.set(household?.id ?? null));
-
-    this.clientDataService.fetchLatestClientRelease().then((release) => this.release.set(release));
   }
 
   /**

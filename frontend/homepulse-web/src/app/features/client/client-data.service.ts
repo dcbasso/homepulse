@@ -1,32 +1,25 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { catchError, firstValueFrom, of } from 'rxjs';
+import { firstValueFrom } from 'rxjs';
 import { AuthService } from '../../core/auth.service';
 import { HouseholdContextService } from '../../core/household-context.service';
 import { environment } from '../../../environments/environment';
 
-/** GitHub API base URL, used to resolve the latest published client release. */
-const GITHUB_API_BASE = 'https://api.github.com/repos/dcbasso/homepulse';
+/**
+ * Version of the homepulse-client binary published at
+ * `public/downloads/homepulse-client-linux-x86_64` — this repository is
+ * private, so the browser cannot resolve the latest release through
+ * GitHub's public API; the binary is instead built locally
+ * (`cargo build --release` in client/homepulse-client) and copied into the
+ * frontend's static assets before each deploy. Bump this constant whenever
+ * that file is replaced with a newer build.
+ */
+export const CLIENT_VERSION = '0.1.1';
 
-/** Prefix identifying a GitHub release as a homepulse-client release (vs. a monorepo-wide release tag). */
-const CLIENT_RELEASE_TAG_PREFIX = 'client-v';
+/** Path (relative to the site root) the Linux binary is served from. */
+const LINUX_DOWNLOAD_PATH = '/downloads/homepulse-client-linux-x86_64';
 
-/** Asset filename the client CI attaches to each client-v* release. */
-const LINUX_ASSET_NAME = 'homepulse-client-linux-x86_64';
-
-/** A GitHub release asset, as returned by the GitHub REST API. */
-interface GitHubReleaseAsset {
-  name: string;
-  browser_download_url: string;
-}
-
-/** A GitHub release, as returned by the GitHub REST API (subset of fields used here). */
-interface GitHubRelease {
-  tag_name: string;
-  assets: GitHubReleaseAsset[];
-}
-
-/** Result of resolving the latest published homepulse-client release. */
+/** The downloadable homepulse-client Linux build bundled with this deploy. */
 export interface ClientRelease {
   version: string;
   downloadUrl: string;
@@ -34,7 +27,7 @@ export interface ClientRelease {
 
 /**
  * Backs the Client screen: issuing self-service ingest API keys and
- * resolving the latest downloadable homepulse-client binary.
+ * exposing the bundled homepulse-client binary for download.
  */
 @Injectable({ providedIn: 'root' })
 export class ClientDataService {
@@ -71,30 +64,11 @@ export class ClientDataService {
   }
 
   /**
-   * Resolves the most recently published homepulse-client Linux release,
-   * by filtering GitHub's public releases list for the client's own tag
-   * prefix (`client-v*`) rather than using `/releases/latest` — which would
-   * incorrectly resolve to the monorepo's own version tags. Uses GitHub's
-   * unauthenticated API, acceptable for a low-traffic screen.
+   * Returns the homepulse-client Linux build bundled with this deploy.
    *
-   * @returns The latest client release's version and download URL, or null
-   *   when no `client-v*` release has been published yet (or the lookup fails).
+   * @returns The bundled release's version and download path.
    */
-  async fetchLatestClientRelease(): Promise<ClientRelease | null> {
-    const releases = await firstValueFrom(
-      this.http.get<GitHubRelease[]>(`${GITHUB_API_BASE}/releases`).pipe(catchError(() => of([]))),
-    );
-    const clientRelease = releases.find((release) => release.tag_name.startsWith(CLIENT_RELEASE_TAG_PREFIX));
-    if (!clientRelease) {
-      return null;
-    }
-    const asset = clientRelease.assets.find((a) => a.name === LINUX_ASSET_NAME);
-    if (!asset) {
-      return null;
-    }
-    return {
-      version: clientRelease.tag_name.slice(CLIENT_RELEASE_TAG_PREFIX.length),
-      downloadUrl: asset.browser_download_url,
-    };
+  getLinuxRelease(): ClientRelease {
+    return { version: CLIENT_VERSION, downloadUrl: LINUX_DOWNLOAD_PATH };
   }
 }
