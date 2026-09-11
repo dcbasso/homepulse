@@ -215,8 +215,9 @@ resource "google_cloudfunctions2_function" "send_test_alert" {
     max_instance_count = 1
 
     environment_variables = {
-      GCP_PROJECT_ID = var.project_id
-      ALERT_EMAIL    = var.alert_email
+      GCP_PROJECT_ID     = var.project_id
+      ALERT_EMAIL        = var.alert_email
+      FIRESTORE_DATABASE = var.firestore_database
     }
 
     # Sensitive values injected from Secret Manager at startup — needed for
@@ -250,6 +251,137 @@ resource "google_cloud_run_service_iam_member" "send_test_alert_invoker" {
   project  = var.project_id
   location = var.region
   service  = google_cloudfunctions2_function.send_test_alert.name
+  role     = "roles/run.invoker"
+  member   = "allUsers"
+}
+
+# ---------------------------------------------------------------------------
+# Cloud Function (Gen 2) — send-invite-email
+#
+# Called directly from the Members screen's "Send invite" button to email an
+# existing household member a link to the app and to the client download
+# page. IAM allows unauthenticated invocation (needed so the browser can call
+# it directly), but the function itself only acts on requests carrying a
+# valid Firebase ID token for an owner/admin of the target household, and
+# only for an email already present in that household's members[] (see
+# _verify_firebase_token/_get_member_role in main.py) — the real access
+# control lives in application code here, not in IAM.
+# ---------------------------------------------------------------------------
+
+resource "google_cloudfunctions2_function" "send_invite_email" {
+  name     = "send-invite-email"
+  location = var.region
+
+  labels = local.common_labels
+
+  build_config {
+    runtime     = "python312"
+    entry_point = "send_invite_email"
+
+    source {
+      storage_source {
+        bucket = google_storage_bucket.function_source.name
+        object = google_storage_bucket_object.function_source.name
+      }
+    }
+  }
+
+  service_config {
+    available_memory   = "256M"
+    timeout_seconds    = 30
+    min_instance_count = 0
+    max_instance_count = 1
+
+    environment_variables = {
+      GCP_PROJECT_ID     = var.project_id
+      FIRESTORE_DATABASE = var.firestore_database
+    }
+
+    # Sensitive values injected from Secret Manager at startup — needed to
+    # send the invite via the Gmail API.
+    secret_environment_variables {
+      key        = "GMAIL_CLIENT_ID"
+      project_id = var.project_id
+      secret     = data.google_secret_manager_secret.gmail_client_id.secret_id
+      version    = "latest"
+    }
+
+    secret_environment_variables {
+      key        = "GMAIL_CLIENT_SECRET"
+      project_id = var.project_id
+      secret     = data.google_secret_manager_secret.gmail_client_secret.secret_id
+      version    = "latest"
+    }
+
+    secret_environment_variables {
+      key        = "GMAIL_REFRESH_TOKEN"
+      project_id = var.project_id
+      secret     = data.google_secret_manager_secret.gmail_refresh_token.secret_id
+      version    = "latest"
+    }
+
+    service_account_email = var.sa_email
+  }
+}
+
+resource "google_cloud_run_service_iam_member" "send_invite_email_invoker" {
+  project  = var.project_id
+  location = var.region
+  service  = google_cloudfunctions2_function.send_invite_email.name
+  role     = "roles/run.invoker"
+  member   = "allUsers"
+}
+
+# ---------------------------------------------------------------------------
+# Cloud Function (Gen 2) — issue-api-key
+#
+# Called directly from the Client screen's "Generate API key" button to let
+# an owner/admin self-issue a Rust client API key without an operator
+# running scripts/issue_api_key.py manually. IAM allows unauthenticated
+# invocation (needed so the browser can call it directly), but the function
+# itself only acts on requests carrying a valid Firebase ID token for an
+# owner/admin of the target household (see _verify_firebase_token/
+# _get_member_role in main.py) — the real access control lives in
+# application code here, not in IAM. No Gmail secrets needed.
+# ---------------------------------------------------------------------------
+
+resource "google_cloudfunctions2_function" "issue_api_key" {
+  name     = "issue-api-key"
+  location = var.region
+
+  labels = local.common_labels
+
+  build_config {
+    runtime     = "python312"
+    entry_point = "issue_api_key"
+
+    source {
+      storage_source {
+        bucket = google_storage_bucket.function_source.name
+        object = google_storage_bucket_object.function_source.name
+      }
+    }
+  }
+
+  service_config {
+    available_memory   = "256M"
+    timeout_seconds    = 10
+    min_instance_count = 0
+    max_instance_count = 1
+
+    environment_variables = {
+      GCP_PROJECT_ID     = var.project_id
+      FIRESTORE_DATABASE = var.firestore_database
+    }
+
+    service_account_email = var.sa_email
+  }
+}
+
+resource "google_cloud_run_service_iam_member" "issue_api_key_invoker" {
+  project  = var.project_id
+  location = var.region
+  service  = google_cloudfunctions2_function.issue_api_key.name
   role     = "roles/run.invoker"
   member   = "allUsers"
 }

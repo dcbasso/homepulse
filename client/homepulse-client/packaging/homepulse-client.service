@@ -1,0 +1,14 @@
+[Unit]
+Description=HomePulse client (heartbeat + speedtest reporting)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/homepulse-client --config /etc/homepulse-client/config.json
+Restart=on-failure
+RestartSec=5
+DynamicUser=yes
+
+[Install]
+WantedBy=multi-user.target
