@@ -35,8 +35,18 @@ service cloud.firestore {
       // the one-shot migration script, ADR 0009), never self-elevating.
       // See HouseholdContextService.claimMembership.
       match /members/{memberId} {
+        // An owner/admin editing their own existing member doc may not
+        // change their own `role` — otherwise the last owner/admin of a
+        // household could accidentally (or deliberately) lock themselves
+        // out with no one left able to grant access back.
+        function isSelfRoleChange() {
+          return request.auth.uid == memberId
+            && resource != null
+            && request.resource.data.role != resource.data.role;
+        }
+
         allow read: if isMember();
-        allow write: if isOwnerOrAdmin()
+        allow write: if (isOwnerOrAdmin() && !isSelfRoleChange())
           || (request.auth != null
               && request.auth.uid == memberId
               && request.auth.token.email != null

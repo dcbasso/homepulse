@@ -48,6 +48,18 @@ export class MembersDataService {
   }
 
   /**
+   * Updates the role of an existing member of the active household.
+   *
+   * @param member - The member entry to update, as read from {@link getMembers}.
+   * @param role - The new role to assign to the member.
+   * @throws Error when there is no active household.
+   */
+  async updateMemberRole(member: HouseholdMemberEntry, role: HouseholdRole): Promise<void> {
+    const householdId = await this.requireActiveHouseholdId();
+    await setDoc(doc(this.firestore, `households/${householdId}/members/${member.id}`), { role }, { merge: true });
+  }
+
+  /**
    * Removes a member from the active household, revoking their access.
    *
    * @param member - The member entry to remove, as read from {@link getMembers}.

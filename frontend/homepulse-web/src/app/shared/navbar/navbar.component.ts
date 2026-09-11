@@ -63,9 +63,11 @@ const MOBILE_BREAKPOINT = '(max-width: 768px)';
           <a mat-list-item routerLink="/settings" routerLinkActive="active-link" (click)="drawer.close()">
             {{ 'NAV.SETTINGS' | translate }}
           </a>
-          <a mat-list-item routerLink="/members" routerLinkActive="active-link" (click)="drawer.close()">
-            {{ 'NAV.MEMBERS' | translate }}
-          </a>
+          @if (canManageHousehold()) {
+            <a mat-list-item routerLink="/members" routerLinkActive="active-link" (click)="drawer.close()">
+              {{ 'NAV.MEMBERS' | translate }}
+            </a>
+          }
           <a mat-list-item routerLink="/about" routerLinkActive="active-link" (click)="drawer.close()">
             {{ 'NAV.ABOUT' | translate }}
           </a>
@@ -123,9 +125,11 @@ const MOBILE_BREAKPOINT = '(max-width: 768px)';
               <a mat-button routerLink="/settings" routerLinkActive="active-link">
                 {{ 'NAV.SETTINGS' | translate }}
               </a>
-              <a mat-button routerLink="/members" routerLinkActive="active-link">
-                {{ 'NAV.MEMBERS' | translate }}
-              </a>
+              @if (canManageHousehold()) {
+                <a mat-button routerLink="/members" routerLinkActive="active-link">
+                  {{ 'NAV.MEMBERS' | translate }}
+                </a>
+              }
               <a mat-button routerLink="/about" routerLinkActive="active-link">
                 {{ 'NAV.ABOUT' | translate }}
               </a>
@@ -214,6 +218,9 @@ export class NavbarComponent {
 
   /** Id of the currently active household. */
   protected activeHouseholdId = computed(() => this.householdContext.activeHousehold()?.id ?? null);
+
+  /** True when the signed-in user can manage the active household's members. */
+  protected canManageHousehold = this.householdContext.canManageActiveHousehold;
 
   /**
    * Signs out the current user and navigates to the login screen.
