@@ -75,6 +75,14 @@ const ASSIGNABLE_ROLES: HouseholdRole[] = ['owner', 'admin', 'member'];
               @if (canManage()) {
                 <button
                   mat-icon-button
+                  [attr.aria-label]="'MEMBERS.INVITE' | translate"
+                  [disabled]="invitingEmail() === member.email"
+                  (click)="sendInvite(member)"
+                >
+                  <mat-icon>mail</mat-icon>
+                </button>
+                <button
+                  mat-icon-button
                   [attr.aria-label]="'COMMON.REMOVE' | translate"
                   [disabled]="removing()"
                   (click)="removeMember(member)"
@@ -218,6 +226,9 @@ export class MembersComponent {
   removing = signal(false);
   changingRole = signal(false);
 
+  /** Email of the member an invite is currently being sent to, or null. */
+  invitingEmail = signal<string | null>(null);
+
   /** Email of the signed-in user, used to badge their own row. */
   currentUserEmail = signal<string | null>(null);
 
@@ -273,6 +284,20 @@ export class MembersComponent {
       .then(() => this.snackBar.open(this.translate.instant('MEMBERS.ROLE_UPDATE_SUCCESS'), '', { duration: 3000 }))
       .catch(() => this.snackBar.open(this.translate.instant('MEMBERS.ERROR'), '', { duration: 3000 }))
       .finally(() => this.changingRole.set(false));
+  }
+
+  /**
+   * Sends (or resends) an invite email to an existing member of the active
+   * household.
+   *
+   * @param member - The member entry to invite.
+   */
+  sendInvite(member: HouseholdMemberEntry): void {
+    this.invitingEmail.set(member.email);
+    this.membersDataService.sendInvite(member.email)
+      .then(() => this.snackBar.open(this.translate.instant('MEMBERS.INVITE_SUCCESS'), '', { duration: 3000 }))
+      .catch(() => this.snackBar.open(this.translate.instant('MEMBERS.INVITE_ERROR'), '', { duration: 3000 }))
+      .finally(() => this.invitingEmail.set(null));
   }
 
   /**
