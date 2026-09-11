@@ -68,6 +68,9 @@ const MOBILE_BREAKPOINT = '(max-width: 768px)';
               {{ 'NAV.MEMBERS' | translate }}
             </a>
           }
+          <a mat-list-item routerLink="/client" routerLinkActive="active-link" (click)="drawer.close()">
+            {{ 'NAV.CLIENT' | translate }}
+          </a>
           <a mat-list-item routerLink="/about" routerLinkActive="active-link" (click)="drawer.close()">
             {{ 'NAV.ABOUT' | translate }}
           </a>
@@ -130,6 +133,9 @@ const MOBILE_BREAKPOINT = '(max-width: 768px)';
                   {{ 'NAV.MEMBERS' | translate }}
                 </a>
               }
+              <a mat-button routerLink="/client" routerLinkActive="active-link">
+                {{ 'NAV.CLIENT' | translate }}
+              </a>
               <a mat-button routerLink="/about" routerLinkActive="active-link">
                 {{ 'NAV.ABOUT' | translate }}
               </a>

@@ -24,6 +24,7 @@
         "MENU": "Menu",
         "PREFERENCES": "Preferences",
         "MEMBERS": "Members",
+        "CLIENT": "Client",
         "HOUSEHOLD": "Household"
     },
     "PREFERENCES": {
@@ -181,7 +182,34 @@
         "ADD_SUCCESS": "Member added successfully",
         "REMOVE_SUCCESS": "Member removed successfully",
         "ROLE_UPDATE_SUCCESS": "Role updated successfully",
-        "ERROR": "Something went wrong. Please try again."
+        "ERROR": "Something went wrong. Please try again.",
+        "INVITE": "Send invite",
+        "INVITE_SUCCESS": "Invite sent successfully",
+        "INVITE_ERROR": "Could not send the invite. Please try again."
+    },
+    "CLIENT": {
+        "TITLE": "Monitoring client",
+        "GENERATE_KEY": "Generate new API key",
+        "GENERATE_KEY_ERROR": "Could not generate the key. Please try again.",
+        "KEY_DIALOG_TITLE": "Your new API key",
+        "KEY_WARNING": "Copy this key now — it cannot be recovered afterward.",
+        "COPY": "Copy",
+        "COPIED": "Copied!",
+        "CLOSE": "Close",
+        "HOUSEHOLD_ID_LABEL": "Household ID",
+        "TAB_LINUX": "Standalone Linux",
+        "TAB_WINDOWS": "Windows",
+        "TAB_DEBIAN": "Debian/Ubuntu",
+        "TAB_ARCH": "Arch",
+        "COMING_SOON": "Coming soon",
+        "DOWNLOAD": "Download binary",
+        "NO_RELEASE_YET": "No client release is available for download yet.",
+        "INSTALL_STEPS_TITLE": "Install as a service (systemd)",
+        "INSTALL_STEP_1": "Download the binary above and make it executable: chmod +x homepulse-client",
+        "INSTALL_STEP_2": "Move it to /usr/local/bin/homepulse-client",
+        "INSTALL_STEP_3": "Generate your API key above and create /etc/homepulse-client/config.json with the household ID and the key",
+        "INSTALL_STEP_4": "Install the systemd unit (homepulse-client.service) and enable/start the service",
+        "INSTALL_DOCS_LINK": "See full instructions in the client's README"
     },
     "ABOUT": {
         "TITLE": "About",

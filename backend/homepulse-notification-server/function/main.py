@@ -25,6 +25,7 @@ from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
 
+import api_keys
 from email_template import build_html_email
 from ingest import ingest_heartbeat, ingest_speedtest  # noqa: F401 -- re-exported as Cloud Function entry points
 
@@ -103,6 +104,25 @@ _CORS_HEADERS = {
     "Access-Control-Allow-Methods": "POST, OPTIONS",
     "Access-Control-Allow-Headers": "Authorization, Content-Type",
 }
+
+# Roles allowed to manage a household (invite members, issue API keys) —
+# mirrors the frontend's `canManage` check (see ADR 0003 for the role model).
+_MANAGE_ROLES = {"owner", "admin"}
+
+APP_BASE_URL = "https://homepulse.dantebasso.com.br"
+CLIENT_DOWNLOAD_URL = f"{APP_BASE_URL}/client"
+
+INVITE_EMAIL_SUBJECT = "Você foi convidado para o HomePulse"
+INVITE_EMAIL_BODY = (
+    "Olá!\n\n"
+    "Você foi convidado para acompanhar o monitoramento de internet da sua "
+    "residência no HomePulse.\n\n"
+    f"Acesse: {APP_BASE_URL}\n\n"
+    "Se você usa um dispositivo próprio (Raspberry Pi, mini PC, VM) para "
+    "coletar os dados de conexão, veja como instalar o cliente aqui: "
+    f"{CLIENT_DOWNLOAD_URL}\n\n"
+    "Qualquer dúvida, fale com quem te convidou."
+)
 
 _gmail_service = None
 
@@ -908,14 +928,47 @@ def _verify_firebase_token(request) -> dict | None:
     return claims
 
 
+def _find_member(db: firestore.Client, household_id: str, uid: str, email: str | None) -> dict | None:
+    """Finds a household member's document data by uid or email.
+
+    Membership is stored as a `households/{household_id}/members/{memberId}`
+    subcollection (see ADR 0006), keyed by Firebase Auth `uid` once the
+    member has signed in at least once, or by email while an invitation is
+    still unclaimed (see ADR 0005) — never as an array field on the
+    household's root document. Matches by uid first, falling back to email.
+
+    Args:
+        db: Authenticated Firestore client.
+        household_id: ID of the household to check membership against.
+        uid: Firebase Auth UID of the caller, or "" if unavailable.
+        email: Email of the caller, or None if unavailable.
+
+    Returns:
+        The matching member document's data, or None if the household
+        doesn't exist or no member matches.
+    """
+    members_ref = _household_ref(db, household_id).collection("members")
+    if uid:
+        doc = members_ref.document(uid).get()
+        if doc.exists:
+            return doc.to_dict()
+        for snap in members_ref.where("uid", "==", uid).limit(1).stream():
+            return snap.to_dict()
+    if email:
+        doc = members_ref.document(email).get()
+        if doc.exists:
+            return doc.to_dict()
+        for snap in members_ref.where("email", "==", email).limit(1).stream():
+            return snap.to_dict()
+    return None
+
+
 def _is_household_member(db: firestore.Client, household_id: str, uid: str, email: str | None) -> bool:
     """Checks whether a Firebase user is a member of a household.
 
-    Matches by uid first, falling back to email, against the `members[]`
-    array on the household's root document (see ADR 0003). Returns False for
-    a nonexistent household as well as for a real household the caller isn't
-    a member of, so callers can return a uniform 403 without leaking whether
-    the household exists (per ADR 0008).
+    Returns False for a nonexistent household as well as for a real
+    household the caller isn't a member of, so callers can return a uniform
+    403 without leaking whether the household exists (per ADR 0008).
 
     Args:
         db: Authenticated Firestore client.
@@ -926,14 +979,28 @@ def _is_household_member(db: firestore.Client, household_id: str, uid: str, emai
     Returns:
         True if the caller is a member of the household, else False.
     """
-    doc = _household_ref(db, household_id).get()
-    if not doc.exists:
-        return False
-    data = doc.to_dict() or {}
-    for member in data.get("members", []):
-        if member.get("uid") == uid or (email and member.get("email") == email):
-            return True
-    return False
+    return _find_member(db, household_id, uid, email) is not None
+
+
+def _get_member_role(db: firestore.Client, household_id: str, uid: str, email: str | None) -> str | None:
+    """Returns a Firebase user's role within a household.
+
+    Same lookup as `_is_household_member`, but returns the member's role
+    instead of a bool so callers can additionally check for owner/admin
+    privileges.
+
+    Args:
+        db: Authenticated Firestore client.
+        household_id: ID of the household to check membership against.
+        uid: Firebase Auth UID of the caller.
+        email: Email of the caller, or None if unavailable.
+
+    Returns:
+        The member's role (e.g. "owner", "admin", "member"), or None if the
+        household does not exist or the caller isn't a member of it.
+    """
+    member = _find_member(db, household_id, uid, email)
+    return member.get("role") if member else None
 
 
 @functions_framework.http
@@ -1012,3 +1079,111 @@ def send_test_alert(request) -> tuple:
 
     logger.info("Test %s alert sent by %s to %d recipient(s)", channel, caller_email, sent)
     return {"ok": True, "sent": sent}, 200, _CORS_HEADERS
+
+
+@functions_framework.http
+def send_invite_email(request) -> tuple:
+    """Sends an invite email to an existing member of a household.
+
+    Lets the Members screen invite (or re-invite) someone already present in
+    the household's `members[]` allowlist, pointing them at the HomePulse app
+    and the client download page. Requires a valid Firebase ID token
+    (Authorization: Bearer <token>) belonging to an owner/admin of the target
+    household; the invited address must already be a member (this is not an
+    open email relay).
+
+    Args:
+        request: HTTP request. JSON body:
+            household_id: ID of the household the caller must manage.
+            member_email: Email of the member to invite. Must already be
+                present in the household's member list.
+
+    Returns:
+        A tuple of (response_body, http_status_code, headers).
+    """
+    if request.method == "OPTIONS":
+        return "", 204, _CORS_HEADERS
+
+    claims = _verify_firebase_token(request)
+    if claims is None:
+        return {"error": "Unauthorized"}, 401, _CORS_HEADERS
+
+    payload = request.get_json(silent=True) or {}
+    household_id = payload.get("household_id")
+    member_email = payload.get("member_email")
+
+    if not household_id or not member_email:
+        return {"error": "Invalid request"}, 400, _CORS_HEADERS
+
+    db = _get_firestore_client()
+    caller_role = _get_member_role(db, household_id, claims.get("sub"), claims.get("email"))
+    if caller_role not in _MANAGE_ROLES:
+        return {"error": "Forbidden"}, 403, _CORS_HEADERS
+
+    if _get_member_role(db, household_id, "", member_email) is None:
+        return {"error": "Forbidden"}, 403, _CORS_HEADERS
+
+    try:
+        _send_email(to=member_email, subject=INVITE_EMAIL_SUBJECT, body=INVITE_EMAIL_BODY)
+    except Exception as e:
+        logger.error("Invite email to %s failed: %s", member_email, e)
+        return {"error": str(e)}, 502, _CORS_HEADERS
+
+    logger.info("Invite email sent to %s (household %s) by %s", member_email, household_id, claims.get("email"))
+    return {"ok": True}, 200, _CORS_HEADERS
+
+
+@functions_framework.http
+def issue_api_key(request) -> tuple:
+    """Issues a new ingest API key for a household, self-service from the UI.
+
+    Lets an owner/admin generate their own Rust client API key from the
+    Client screen instead of relying on an operator running
+    `scripts/issue_api_key.py` manually. The raw key is returned exactly
+    once in the response body and is never logged or persisted in clear
+    text — only its SHA-256 hash is stored, in `households/{id}.api_keys[]`
+    (see ADR 0004/0010 and `api_keys.py`).
+
+    Requires a valid Firebase ID token (Authorization: Bearer <token>)
+    belonging to an owner/admin of the target household. `household_id` in
+    the body only selects which household to act on — it never grants
+    authorization by itself; the caller's membership and role are always
+    revalidated against it.
+
+    Args:
+        request: HTTP request. JSON body:
+            household_id: ID of the household the caller must manage.
+            label: Optional human-readable label for the new key.
+
+    Returns:
+        A tuple of (response_body, http_status_code, headers).
+    """
+    if request.method == "OPTIONS":
+        return "", 204, _CORS_HEADERS
+
+    claims = _verify_firebase_token(request)
+    if claims is None:
+        return {"error": "Unauthorized"}, 401, _CORS_HEADERS
+
+    payload = request.get_json(silent=True) or {}
+    household_id = payload.get("household_id")
+    label = payload.get("label")
+
+    if not household_id:
+        return {"error": "Invalid request"}, 400, _CORS_HEADERS
+
+    db = _get_firestore_client()
+    caller_role = _get_member_role(db, household_id, claims.get("sub"), claims.get("email"))
+    if caller_role not in _MANAGE_ROLES:
+        return {"error": "Forbidden"}, 403, _CORS_HEADERS
+
+    try:
+        raw_key = api_keys.issue_key(db, household_id, label, dry_run=False)
+    except ValueError:
+        return {"error": "Forbidden"}, 403, _CORS_HEADERS
+    except Exception as e:
+        logger.exception("Failed to issue API key for household %s: %s", household_id, e)
+        return {"error": "Internal error"}, 500, _CORS_HEADERS
+
+    logger.info("New API key issued for household %s by %s", household_id, claims.get("email"))
+    return {"api_key": raw_key, "label": label or ""}, 200, _CORS_HEADERS

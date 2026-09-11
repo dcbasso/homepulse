@@ -24,6 +24,7 @@
         "MENU": "Men\u00fa",
         "PREFERENCES": "Preferencias",
         "MEMBERS": "Miembros",
+        "CLIENT": "Client",
         "HOUSEHOLD": "Hogar"
     },
     "PREFERENCES": {
@@ -181,7 +182,34 @@
         "ADD_SUCCESS": "Miembro agregado con \u00e9xito",
         "REMOVE_SUCCESS": "Miembro eliminado con \u00e9xito",
         "ROLE_UPDATE_SUCCESS": "Rol actualizado correctamente",
-        "ERROR": "Algo sali\u00f3 mal. Int\u00e9ntalo de nuevo."
+        "ERROR": "Algo sali\u00f3 mal. Int\u00e9ntalo de nuevo.",
+        "INVITE": "Enviar invitaci\u00f3n",
+        "INVITE_SUCCESS": "Invitaci\u00f3n enviada con \u00e9xito",
+        "INVITE_ERROR": "No se pudo enviar la invitaci\u00f3n. Int\u00e9ntalo de nuevo."
+    },
+    "CLIENT": {
+        "TITLE": "Cliente de monitoreo",
+        "GENERATE_KEY": "Generar nueva API key",
+        "GENERATE_KEY_ERROR": "No se pudo generar la clave. Int\u00e9ntalo de nuevo.",
+        "KEY_DIALOG_TITLE": "Tu nueva API key",
+        "KEY_WARNING": "Copia esta clave ahora \u2014 no se puede recuperar despu\u00e9s.",
+        "COPY": "Copiar",
+        "COPIED": "\u00a1Copiado!",
+        "CLOSE": "Cerrar",
+        "HOUSEHOLD_ID_LABEL": "ID del hogar",
+        "TAB_LINUX": "Standalone Linux",
+        "TAB_WINDOWS": "Windows",
+        "TAB_DEBIAN": "Debian/Ubuntu",
+        "TAB_ARCH": "Arch",
+        "COMING_SOON": "Pr\u00f3ximamente",
+        "DOWNLOAD": "Descargar binario",
+        "NO_RELEASE_YET": "Todav\u00eda no hay ninguna versi\u00f3n publicada del client para descargar.",
+        "INSTALL_STEPS_TITLE": "Instalaci\u00f3n como servicio (systemd)",
+        "INSTALL_STEP_1": "Descarga el binario de arriba y dale permiso de ejecuci\u00f3n: chmod +x homepulse-client",
+        "INSTALL_STEP_2": "Mu\u00e9velo a /usr/local/bin/homepulse-client",
+        "INSTALL_STEP_3": "Genera tu API key arriba y crea /etc/homepulse-client/config.json con el ID del hogar y la clave",
+        "INSTALL_STEP_4": "Instala la unit de systemd (homepulse-client.service) y habilita/inicia el servicio",
+        "INSTALL_DOCS_LINK": "Ver instrucciones completas en el README del client"
     },
     "ABOUT": {
         "TITLE": "Acerca de",

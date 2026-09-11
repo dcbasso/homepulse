@@ -1,9 +1,12 @@
 import { Injectable, inject } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
 import { Firestore, deleteDoc, doc, setDoc } from '@angular/fire/firestore';
 import { Observable, firstValueFrom, switchMap, take } from 'rxjs';
 import { FirestoreService } from '../../core/firestore.service';
+import { AuthService } from '../../core/auth.service';
 import { HouseholdContextService } from '../../core/household-context.service';
 import { HouseholdMember, HouseholdRole } from '../../core/models/household.model';
+import { environment } from '../../../environments/environment';
 
 /** A household member as read from the `members` subcollection, including its document id. */
 export type HouseholdMemberEntry = HouseholdMember & { id: string };
@@ -21,6 +24,8 @@ export class MembersDataService {
   private firestore = inject(Firestore);
   private firestoreService = inject(FirestoreService);
   private householdContext = inject(HouseholdContextService);
+  private authService = inject(AuthService);
+  private http = inject(HttpClient);
 
   /**
    * Returns a real-time observable of the active household's member list.
@@ -68,6 +73,31 @@ export class MembersDataService {
   async removeMember(member: HouseholdMemberEntry): Promise<void> {
     const householdId = await this.requireActiveHouseholdId();
     await deleteDoc(doc(this.firestore, `households/${householdId}/members/${member.id}`));
+  }
+
+  /**
+   * Sends (or resends) an invite email to an existing member of the active
+   * household, pointing them at the app and the client download page.
+   * Restricted server-side to owner/admin callers, and to emails already
+   * present in the household's member list.
+   *
+   * @param memberEmail - Email of the member to invite.
+   * @throws Error when the caller is not signed in, there is no active
+   *   household, or the Cloud Function rejects the request.
+   */
+  async sendInvite(memberEmail: string): Promise<void> {
+    const idToken = await this.authService.getIdToken();
+    if (!idToken) {
+      throw new Error('Not signed in');
+    }
+    const householdId = await this.requireActiveHouseholdId();
+    await firstValueFrom(
+      this.http.post<{ ok: boolean }>(
+        environment.inviteFunctionUrl,
+        { household_id: householdId, member_email: memberEmail },
+        { headers: { Authorization: `Bearer ${idToken}` } },
+      ),
+    );
   }
 
   private async requireActiveHouseholdId(): Promise<string> {
