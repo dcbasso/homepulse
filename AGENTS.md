@@ -1,9 +1,9 @@
-# homepulse-gcp — Project Conventions
+# homepulse — Project Conventions
 
 ## Monorepo Structure
 
 ```
-homepulse-gcp/
+homepulse/
 ├── client/homepulse-client/          # Rust — local agent (runs speedtest, writes to Firestore)
 ├── frontend/homepulse-web/           # Angular — dashboard SPA (Firebase Hosting)
 └── backend/homepulse-notification-server/

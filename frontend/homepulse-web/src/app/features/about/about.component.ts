@@ -11,7 +11,7 @@ const APP_VERSION = '3.0.0';
 const AUTHOR = {
   name: 'Dante Basso',
   email: 'dcbasso@gmail.com',
-  github: 'https://github.com/dcbasso/homepulse-gcp',
+  github: 'https://github.com/dcbasso/homepulse',
   linkedin: 'https://www.linkedin.com/in/dante-basso-filho',
   personalSite: 'https://www.dantebasso.com.br/',
 };

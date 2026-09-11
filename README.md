@@ -1,10 +1,10 @@
-# homepulse-gcp
+# homepulse
 
 Home internet connection monitor — GCP implementation.
 
 Runs a speedtest on a local machine on a schedule, stores results in Firestore, sends Gmail and/or Telegram alerts on outages, and exposes a web dashboard for historical analysis.
 
-Project page: https://www.dantebasso.com.br/opensource/homepulse-gcp
+Project page: https://www.dantebasso.com.br/opensource/homepulse
 
 ## Monorepo Structure
 
@@ -50,6 +50,35 @@ See the setup guide in each subproject:
 - [backend/homepulse-notification-server/function/](backend/homepulse-notification-server/function/) — Cloud Function deployment
 - [backend/homepulse-notification-server/terraform/](backend/homepulse-notification-server/terraform/) — GCP infra provisioning
 - [frontend/homepulse-web/](frontend/homepulse-web/) — Angular dashboard setup
+
+## Registering a New Household (Admin)
+
+There is no public self-signup — see [ADR 0005](docs/adr/0005-allowlist-administrada-manualmente-para-acesso.md). A new household is onboarded manually by the admin (the project operator):
+
+1. **Create the household document** in Firestore (Console → `speedtest-monitordb-one` database, or `gcloud firestore`), matching the shape used by [`migrate_to_households.py`](backend/homepulse-notification-server/scripts/migrate_to_households.py) (see [ADR 0006](docs/adr/0006-firestore-security-rules-baseadas-em-membership-de-household.md)):
+   ```
+   households/{household_id}
+     name: "Some Household"
+     status: "active"
+     api_keys: []
+   ```
+2. **Invite the owner** by creating an email-keyed member document — the app reconciles it to the real Firebase Auth UID on that user's first login (`HouseholdContextService.resolveMembershipsFor`/`claimMembership`):
+   ```
+   households/{household_id}/members/{owner_email}
+     uid: ""
+     email: "owner@example.com"
+     role: "owner"
+   ```
+3. **Issue an ingest API key** for the household's `homepulse-client` instance:
+   ```bash
+   cd backend/homepulse-notification-server/scripts
+   python3 issue_api_key.py --household-id <household_id> --label "home-server"
+   ```
+   Copy the printed key immediately — only its SHA-256 hash is stored, it cannot be recovered afterward.
+4. **Configure the client** — copy `client/homepulse-client/config.json.example` to `config.json` and fill in `ingest.household_id` and `ingest.api_key` with the values from the steps above.
+5. The owner signs in on the dashboard with the Google account matching the invited email — membership is claimed automatically, no further action needed.
+
+To add more members to an existing household (not just the owner), repeat step 2 with `role: "member"` or `"admin"`.
 
 ## Gmail OAuth — Publishing Status Gotcha
 
