@@ -8,6 +8,12 @@
 
 # Pastas deploy — credenciais e tokens locais, nunca commitar
 **/deploy/
+
+# Binário do client servido estaticamente pelo Firebase Hosting — gerado
+# localmente (cargo build --release) e copiado aqui antes de cada deploy do
+# frontend, nunca commitado (o repositório é privado e a API pública do
+# GitHub não é acessível para resolver releases dinamicamente).
+frontend/homepulse-web/public/downloads/
 # Exceto arquivos de referência dentro de deploy
 !**/deploy/*.example
 !**/deploy/*.md
