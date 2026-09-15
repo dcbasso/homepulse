@@ -17,7 +17,7 @@ pub struct Config {
 /// Settings for the liveness heartbeat loop.
 ///
 /// The heartbeat is a cheap, frequent HTTP call that proves connectivity
-/// without running the expensive Ookla speedtest binary.
+/// without running the much more expensive speedtest measurement.
 #[derive(Debug, Deserialize, Clone)]
 pub struct HeartbeatConfig {
     pub interval_minutes: u64,
@@ -27,10 +27,19 @@ pub struct HeartbeatConfig {
     pub whoami_url: String,
 }
 
-/// Settings for the speedtest CLI binary and its run cadence.
+/// Settings for the speedtest measurement engine and its run cadence.
 #[derive(Debug, Deserialize, Clone)]
 pub struct SpeedtestConfig {
-    pub binary_path: String,
+    /// Which measurement backend to use: `"cloudflare"`, `"librespeed"`, or
+    /// `"ookla"` (alias: `"speedtest"` — the same speedtest.net/Ookla server
+    /// network the official `speedtest` CLI used, measured natively over
+    /// HTTP with fallback across candidate servers). See the `speedtest`
+    /// module docs for details on each.
+    pub provider: String,
+    /// Base URL of a self-hosted LibreSpeed backend. Required (and only
+    /// used) when `provider = "librespeed"`.
+    #[serde(default)]
+    pub librespeed_url: Option<String>,
     pub timeout_seconds: u64,
     pub interval_minutes: u64,
     /// See [`HeartbeatConfig::whoami_url`].

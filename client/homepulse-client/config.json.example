@@ -4,7 +4,8 @@
     "whoami_url": "https://<region>-<project>.cloudfunctions.net/whoami"
   },
   "speedtest": {
-    "binary_path": "speedtest",
+    "provider": "cloudflare",
+    "librespeed_url": null,
     "timeout_seconds": 60,
     "interval_minutes": 60,
     "whoami_url": "https://<region>-<project>.cloudfunctions.net/whoami"

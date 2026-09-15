@@ -8,15 +8,7 @@ RUN cargo build --release
 FROM debian:bookworm-slim
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates curl gnupg jq \
-    && curl -fsSL https://packagecloud.io/ookla/speedtest-cli/gpgkey \
-        | gpg --dearmor -o /usr/share/keyrings/ookla-speedtest-cli-archive-keyring.gpg \
-    && echo "deb [signed-by=/usr/share/keyrings/ookla-speedtest-cli-archive-keyring.gpg] https://packagecloud.io/ookla/speedtest-cli/debian/ bookworm main" \
-        > /etc/apt/sources.list.d/ookla_speedtest-cli.list \
-    && apt-get update \
-    && apt-get install -y --no-install-recommends speedtest \
-    && apt-get purge -y curl gnupg \
-    && apt-get autoremove -y \
+    && apt-get install -y --no-install-recommends ca-certificates jq \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /build/target/release/homepulse-client /usr/local/bin/homepulse-client

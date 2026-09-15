@@ -37,7 +37,8 @@ cat > /etc/homepulse-client/config.json <<JSON
     "whoami_url": "${WHOAMI_URL}"
   },
   "speedtest": {
-    "binary_path": "speedtest",
+    "provider": "cloudflare",
+    "librespeed_url": null,
     "timeout_seconds": 60,
     "interval_minutes": 60,
     "whoami_url": "${WHOAMI_URL}"

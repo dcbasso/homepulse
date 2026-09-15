@@ -111,10 +111,10 @@ async fn resolve_external_ips(whoami_url: &str) -> (Option<String>, Option<Strin
 
 /// Runs the speedtest loop forever, ticking every `cfg.speedtest.interval_minutes` minutes.
 ///
-/// Each tick runs the Ookla `speedtest` CLI and posts the result to the
-/// Ingest API, authenticated with the household's API key. Any failure is
-/// logged and the loop continues to the next tick rather than aborting the
-/// process.
+/// Each tick runs the configured speedtest provider (see [`speedtest`]) and
+/// posts the result to the Ingest API, authenticated with the household's
+/// API key. Any failure is logged and the loop continues to the next tick
+/// rather than aborting the process.
 ///
 /// # Arguments
 /// * `cfg` - Full application configuration.
@@ -130,13 +130,15 @@ async fn run_speedtest_loop(cfg: Config) {
     }
 }
 
-/// Performs a single speedtest tick: run Ookla, post the result to the Ingest API.
+/// Performs a single speedtest tick: run the configured provider, post the
+/// result to the Ingest API.
 ///
 /// # Errors
-/// Returns an error if the speedtest binary fails or the Ingest API call fails.
+/// Returns an error if the speedtest measurement fails or the Ingest API
+/// call fails.
 async fn run_speedtest_once(cfg: &Config) -> Result<()> {
     info!("Running speedtest...");
-    let mut result = speedtest::run(&cfg.speedtest)?;
+    let mut result = speedtest::run(&cfg.speedtest).await?;
 
     let (external_ip_v4, external_ip_v6) = resolve_external_ips(&cfg.speedtest.whoami_url).await;
     result.external_ip_v4 = external_ip_v4;
