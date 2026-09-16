@@ -204,11 +204,18 @@
         "COMING_SOON": "Coming soon",
         "DOWNLOAD": "Download binary",
         "INSTALL_STEPS_TITLE": "Install as a service (systemd)",
-        "INSTALL_STEP_1": "Download the binary above and make it executable: chmod +x homepulse-client",
-        "INSTALL_STEP_2": "Move it to /usr/local/bin/homepulse-client",
-        "INSTALL_STEP_3": "Generate your API key above and create /etc/homepulse-client/config.json with the household ID and the key",
-        "INSTALL_STEP_4": "Install the systemd unit (homepulse-client.service) and enable/start the service",
-        "INSTALL_DOCS_LINK": "See full instructions in the client's README"
+        "INSTALL_STEP_1": "Download the .tar.gz above and extract it (contains homepulse-client, install.sh, and the systemd unit)",
+        "INSTALL_STEP_2": "Generate your API key above",
+        "INSTALL_STEP_3": "Run ./install.sh with your household ID, API key, and the API URLs (see the README)",
+        "INSTALL_STEP_4": "Check the status with systemctl status homepulse-client.service",
+        "INSTALL_DOCS_LINK": "See full instructions in the client's README",
+        "EXPERIMENTAL_BADGE": "Experimental",
+        "WINDOWS_EXPERIMENTAL_WARNING": "Windows support is experimental: it has not yet been validated on a real Windows machine, only in CI. Use at your own risk and report issues on the repository.",
+        "INSTALL_STEPS_TITLE_WINDOWS": "Install as a Windows Service",
+        "INSTALL_STEP_WINDOWS_1": "Download the .zip above and extract it (contains homepulse-client.exe, install.ps1, and uninstall.ps1)",
+        "INSTALL_STEP_WINDOWS_2": "Generate your API key above",
+        "INSTALL_STEP_WINDOWS_3": "Open PowerShell as Administrator and run install.ps1 with your household ID, API key, and the API URLs (see the README)",
+        "INSTALL_STEP_WINDOWS_4": "Check the status with Get-Service HomePulseClient; logs appear in Event Viewer (Application, source HomePulseClient)"
     },
     "ABOUT": {
         "TITLE": "About",

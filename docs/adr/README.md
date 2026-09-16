@@ -33,5 +33,6 @@ Sequencial, começando em `0001`, arquivo `NNNN-titulo-em-kebab-case.md`. Idioma
 | [0008](0008-autenticacao-por-household-em-todos-os-endpoints-da-api.md) | Autenticação por household em todos os endpoints da API | Proposto |
 | [0009](0009-migracao-de-dados-do-household-unico-existente.md) | Migração de dados do household único existente | Proposto |
 | [0010](0010-rotacao-e-revogacao-de-api-keys-do-client.md) | Rotação e revogação de API keys do client | Proposto |
+| [0011](0011-windows-service-nativo-para-o-client-usando-windows-service.md) | Windows Service nativo para o client, usando a crate windows-service | Aceito |
 
 Veja também [`ROADMAP.md`](ROADMAP.md) para o plano de implementação que executa estas decisões.

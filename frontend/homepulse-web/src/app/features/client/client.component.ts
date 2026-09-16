@@ -18,8 +18,10 @@ import { ApiKeyDialogComponent } from './components/api-key-dialog/api-key-dialo
  * roles), but only an owner/admin sees the "generate API key" action —
  * mirroring the Members screen's `canManage` check.
  *
- * Only the Standalone Linux tab is functional in this release; Windows,
- * Debian/Ubuntu, and Arch are placeholders until packaging exists for them.
+ * The Standalone Linux and Windows tabs are functional; Windows is marked
+ * experimental (native Windows Service support, see ADR 0011, has only been
+ * verified in CI, not on a real Windows host). Debian/Ubuntu and Arch remain
+ * placeholders until packaging exists for them.
  */
 @Component({
   selector: 'app-client',
@@ -50,7 +52,12 @@ import { ApiKeyDialogComponent } from './components/api-key-dialog/api-key-dialo
           <mat-tab-group>
             <mat-tab [label]="'CLIENT.TAB_LINUX' | translate">
               <div class="tab-content">
-                <a mat-raised-button color="primary" [href]="release.downloadUrl" download="homepulse-client-linux-x86_64">
+                <a
+                  mat-raised-button
+                  color="primary"
+                  [href]="release.downloadUrl"
+                  download="homepulse-client-linux-x86_64.tar.gz"
+                >
                   <mat-icon>download</mat-icon>
                   {{ 'CLIENT.DOWNLOAD' | translate }} (v{{ release.version }})
                 </a>
@@ -71,8 +78,42 @@ import { ApiKeyDialogComponent } from './components/api-key-dialog/api-key-dialo
                 </a>
               </div>
             </mat-tab>
-            <mat-tab [label]="'CLIENT.TAB_WINDOWS' | translate">
-              <p class="empty-state tab-content">{{ 'CLIENT.COMING_SOON' | translate }}</p>
+            <mat-tab>
+              <ng-template mat-tab-label>
+                {{ 'CLIENT.TAB_WINDOWS' | translate }}
+                <span class="experimental-badge">{{ 'CLIENT.EXPERIMENTAL_BADGE' | translate }}</span>
+              </ng-template>
+              <div class="tab-content">
+                <p class="experimental-warning">
+                  <mat-icon inline>science</mat-icon>
+                  {{ 'CLIENT.WINDOWS_EXPERIMENTAL_WARNING' | translate }}
+                </p>
+
+                <a
+                  mat-raised-button
+                  color="primary"
+                  [href]="windowsRelease.downloadUrl"
+                  download="homepulse-client-windows-x86_64.zip"
+                >
+                  <mat-icon>download</mat-icon>
+                  {{ 'CLIENT.DOWNLOAD' | translate }} (v{{ windowsRelease.version }})
+                </a>
+
+                <h3>{{ 'CLIENT.INSTALL_STEPS_TITLE_WINDOWS' | translate }}</h3>
+                <ol class="install-steps">
+                  <li>{{ 'CLIENT.INSTALL_STEP_WINDOWS_1' | translate }}</li>
+                  <li>{{ 'CLIENT.INSTALL_STEP_WINDOWS_2' | translate }}</li>
+                  <li>{{ 'CLIENT.INSTALL_STEP_WINDOWS_3' | translate }}</li>
+                  <li>{{ 'CLIENT.INSTALL_STEP_WINDOWS_4' | translate }}</li>
+                </ol>
+                <a
+                  href="https://github.com/dcbasso/homepulse/blob/main/client/homepulse-client/README.md"
+                  target="_blank"
+                  rel="noopener"
+                >
+                  {{ 'CLIENT.INSTALL_DOCS_LINK' | translate }}
+                </a>
+              </div>
             </mat-tab>
             <mat-tab [label]="'CLIENT.TAB_DEBIAN' | translate">
               <p class="empty-state tab-content">{{ 'CLIENT.COMING_SOON' | translate }}</p>
@@ -128,6 +169,29 @@ import { ApiKeyDialogComponent } from './components/api-key-dialog/api-key-dialo
     .install-steps {
       padding-left: 1.25rem;
     }
+
+    .experimental-badge {
+      margin-left: 0.4rem;
+      padding: 0.05rem 0.5rem;
+      border-radius: 1rem;
+      font-size: 0.65rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
+      color: var(--mat-sys-on-tertiary-container);
+      background: var(--mat-sys-tertiary-container);
+    }
+
+    .experimental-warning {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.75rem 1rem;
+      margin: 0 0 1rem;
+      border-radius: 4px;
+      color: var(--mat-sys-on-tertiary-container);
+      background: var(--mat-sys-tertiary-container);
+    }
   `],
 })
 export class ClientComponent {
@@ -149,6 +213,9 @@ export class ClientComponent {
 
   /** The homepulse-client Linux build bundled with this deploy. */
   release: ClientRelease = this.clientDataService.getLinuxRelease();
+
+  /** The homepulse-client Windows build bundled with this deploy (experimental, see ADR 0011). */
+  windowsRelease: ClientRelease = this.clientDataService.getWindowsRelease();
 
   constructor() {
     this.householdContext.activeHousehold$.pipe(

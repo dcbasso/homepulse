@@ -204,11 +204,18 @@
         "COMING_SOON": "Próximamente",
         "DOWNLOAD": "Descargar binario",
         "INSTALL_STEPS_TITLE": "Instalación como servicio (systemd)",
-        "INSTALL_STEP_1": "Descarga el binario de arriba y dale permiso de ejecución: chmod +x homepulse-client",
-        "INSTALL_STEP_2": "Muévelo a /usr/local/bin/homepulse-client",
-        "INSTALL_STEP_3": "Genera tu API key arriba y crea /etc/homepulse-client/config.json con el ID del hogar y la clave",
-        "INSTALL_STEP_4": "Instala la unit de systemd (homepulse-client.service) y habilita/inicia el servicio",
-        "INSTALL_DOCS_LINK": "Ver instrucciones completas en el README del client"
+        "INSTALL_STEP_1": "Descarga el .tar.gz de arriba y extráelo (contiene homepulse-client, install.sh y la unit de systemd)",
+        "INSTALL_STEP_2": "Genera tu API key arriba",
+        "INSTALL_STEP_3": "Ejecuta ./install.sh con el ID del hogar, la API key y las URLs de la API (ver el README)",
+        "INSTALL_STEP_4": "Verifica el estado con systemctl status homepulse-client.service",
+        "INSTALL_DOCS_LINK": "Ver instrucciones completas en el README del client",
+        "EXPERIMENTAL_BADGE": "Experimental",
+        "WINDOWS_EXPERIMENTAL_WARNING": "El soporte para Windows es experimental: todavía no fue validado en una máquina Windows real, solo en CI. Úsalo bajo tu propio riesgo y reporta problemas en el repositorio.",
+        "INSTALL_STEPS_TITLE_WINDOWS": "Instalación como servicio de Windows",
+        "INSTALL_STEP_WINDOWS_1": "Descarga el .zip de arriba y extráelo (contiene homepulse-client.exe, install.ps1 y uninstall.ps1)",
+        "INSTALL_STEP_WINDOWS_2": "Genera tu API key arriba",
+        "INSTALL_STEP_WINDOWS_3": "Abre PowerShell como Administrador y ejecuta install.ps1 con el ID del hogar, la API key y las URLs de la API (ver el README)",
+        "INSTALL_STEP_WINDOWS_4": "Verifica el estado con Get-Service HomePulseClient; los logs aparecen en el Visor de eventos (Application, origen HomePulseClient)"
     },
     "ABOUT": {
         "TITLE": "Acerca de",
