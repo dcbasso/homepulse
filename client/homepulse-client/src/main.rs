@@ -1,7 +1,10 @@
 mod config;
 mod ingest;
+mod shutdown;
 mod speedtest;
 mod whoami;
+#[cfg(windows)]
+mod windows_service;
 
 use anyhow::Result;
 use clap::Parser;
@@ -9,6 +12,7 @@ use config::Config;
 use std::path::PathBuf;
 use std::time::Duration;
 use tokio::time::interval;
+use tokio_util::sync::CancellationToken;
 use tracing::{error, info};
 
 /// Number of seconds in a minute, used to convert configured intervals to [`Duration`]s.
@@ -17,31 +21,126 @@ const SECONDS_PER_MINUTE: u64 = 60;
 /// Command-line arguments for the homepulse client.
 #[derive(Parser, Debug)]
 #[command(name = "homepulse-client")]
-#[command(about = "Runs a liveness heartbeat loop and a speedtest loop, posting both to the Ingest API")]
+#[command(
+    about = "Runs a liveness heartbeat loop and a speedtest loop, posting both to the Ingest API"
+)]
 struct Args {
-    /// Path to the config.json file.
-    #[arg(short, long, default_value = "config.json")]
-    config: PathBuf,
+    /// Path to the config.json file. Defaults to a platform-specific
+    /// location (see [`config::default_config_path`]) when not given.
+    #[arg(short, long)]
+    config: Option<PathBuf>,
+
+    /// Run in the foreground instead of registering with the Windows
+    /// Service Control Manager. Has no effect on non-Windows platforms,
+    /// where foreground is already the only mode.
+    #[cfg(windows)]
+    #[arg(long)]
+    console: bool,
+
+    #[cfg(windows)]
+    #[command(subcommand)]
+    command: Option<WindowsCommand>,
 }
 
-#[tokio::main]
-async fn main() -> Result<()> {
+/// Windows-only subcommands for self-managing the Windows Service
+/// registration, so `packaging/windows/install.ps1` only needs to invoke
+/// the binary itself instead of calling `sc.exe` directly.
+#[cfg(windows)]
+#[derive(clap::Subcommand, Debug)]
+enum WindowsCommand {
+    /// Registers homepulse-client as an auto-starting Windows Service.
+    Install,
+    /// Removes the homepulse-client Windows Service registration.
+    Uninstall,
+    /// Starts the installed Windows Service.
+    Start,
+    /// Stops the running Windows Service.
+    Stop,
+}
+
+fn main() -> Result<()> {
+    let args = Args::parse();
+
+    #[cfg(windows)]
+    {
+        if let Some(command) = &args.command {
+            return dispatch_windows_command(command, &args);
+        }
+
+        // `run_dispatcher` blocks for the lifetime of the service and only
+        // returns `Ok` once the SCM has fully stopped it. It fails fast
+        // when the process was not actually launched by the SCM (e.g. run
+        // manually from a terminal), in which case we fall back to the
+        // console path below.
+        if !args.console && windows_service::run_dispatcher().is_ok() {
+            return Ok(());
+        }
+    }
+
+    run_console(args)
+}
+
+/// Dispatches an install/uninstall/start/stop subcommand and exits.
+///
+/// These operate purely through the Service Control Manager and don't need
+/// a Tokio runtime.
+///
+/// # Errors
+/// Returns an error if the underlying Windows Service operation fails.
+#[cfg(windows)]
+fn dispatch_windows_command(command: &WindowsCommand, args: &Args) -> Result<()> {
+    match command {
+        WindowsCommand::Install => {
+            let config_path = args
+                .config
+                .clone()
+                .unwrap_or_else(config::default_config_path);
+            windows_service::install(&config_path)
+        }
+        WindowsCommand::Uninstall => windows_service::uninstall(),
+        WindowsCommand::Start => windows_service::start(),
+        WindowsCommand::Stop => windows_service::stop(),
+    }
+}
+
+/// Runs the client in the foreground: the only mode on Linux, and the
+/// interactive/`--console` mode on Windows.
+///
+/// Sets up stdout logging, loads the config, wires up OS signal handlers for
+/// cooperative shutdown, and runs [`run_app`] to completion.
+///
+/// # Errors
+/// Returns an error if the config file cannot be loaded.
+fn run_console(args: Args) -> Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .init();
 
-    let args = Args::parse();
-    let cfg = Config::load(&args.config)?;
+    let config_path = args.config.unwrap_or_else(config::default_config_path);
+    let cfg = Config::load(&config_path)?;
 
-    let heartbeat_task = run_heartbeat_loop(cfg.clone());
-    let speedtest_task = run_speedtest_loop(cfg);
+    let token = CancellationToken::new();
+    shutdown::install_signal_handlers(token.clone());
 
-    tokio::join!(heartbeat_task, speedtest_task);
+    let runtime = tokio::runtime::Runtime::new()?;
+    runtime.block_on(run_app(cfg, token));
     Ok(())
 }
 
-/// Runs the liveness heartbeat loop forever, ticking every
-/// `cfg.heartbeat.interval_minutes` minutes.
+/// Runs the heartbeat and speedtest loops until `token` is cancelled.
+///
+/// Shared between the console entry point and, on Windows,
+/// `windows_service::service_main`, so both drive the exact same
+/// application logic.
+pub async fn run_app(cfg: Config, token: CancellationToken) {
+    let heartbeat_task = run_heartbeat_loop(cfg.clone(), token.clone());
+    let speedtest_task = run_speedtest_loop(cfg, token);
+
+    tokio::join!(heartbeat_task, speedtest_task);
+}
+
+/// Runs the liveness heartbeat loop until `token` is cancelled, ticking
+/// every `cfg.heartbeat.interval_minutes` minutes.
 ///
 /// Each tick resolves the public IP via the `whoami` endpoint and posts a
 /// heartbeat to the Ingest API, authenticated with the household's API key.
@@ -50,14 +149,22 @@ async fn main() -> Result<()> {
 ///
 /// # Arguments
 /// * `cfg` - Full application configuration.
-async fn run_heartbeat_loop(cfg: Config) {
+/// * `token` - Cancelled to request a graceful shutdown.
+async fn run_heartbeat_loop(cfg: Config, token: CancellationToken) {
     let period = Duration::from_secs(cfg.heartbeat.interval_minutes * SECONDS_PER_MINUTE);
     let mut ticker = interval(period);
 
     loop {
-        ticker.tick().await;
-        if let Err(e) = run_heartbeat_once(&cfg).await {
-            error!("Heartbeat tick failed: {:?}", e);
+        tokio::select! {
+            _ = ticker.tick() => {
+                if let Err(e) = run_heartbeat_once(&cfg).await {
+                    error!("Heartbeat tick failed: {:?}", e);
+                }
+            }
+            _ = token.cancelled() => {
+                info!("Heartbeat loop shutting down.");
+                break;
+            }
         }
     }
 }
@@ -109,7 +216,8 @@ async fn resolve_external_ips(whoami_url: &str) -> (Option<String>, Option<Strin
     (v4, v6)
 }
 
-/// Runs the speedtest loop forever, ticking every `cfg.speedtest.interval_minutes` minutes.
+/// Runs the speedtest loop until `token` is cancelled, ticking every
+/// `cfg.speedtest.interval_minutes` minutes.
 ///
 /// Each tick runs the Ookla `speedtest` CLI and posts the result to the
 /// Ingest API, authenticated with the household's API key. Any failure is
@@ -118,14 +226,22 @@ async fn resolve_external_ips(whoami_url: &str) -> (Option<String>, Option<Strin
 ///
 /// # Arguments
 /// * `cfg` - Full application configuration.
-async fn run_speedtest_loop(cfg: Config) {
+/// * `token` - Cancelled to request a graceful shutdown.
+async fn run_speedtest_loop(cfg: Config, token: CancellationToken) {
     let period = Duration::from_secs(cfg.speedtest.interval_minutes * SECONDS_PER_MINUTE);
     let mut ticker = interval(period);
 
     loop {
-        ticker.tick().await;
-        if let Err(e) = run_speedtest_once(&cfg).await {
-            error!("Speedtest tick failed: {:?}", e);
+        tokio::select! {
+            _ = ticker.tick() => {
+                if let Err(e) = run_speedtest_once(&cfg).await {
+                    error!("Speedtest tick failed: {:?}", e);
+                }
+            }
+            _ = token.cancelled() => {
+                info!("Speedtest loop shutting down.");
+                break;
+            }
         }
     }
 }

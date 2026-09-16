@@ -70,8 +70,29 @@ impl Config {
     pub fn load(path: &Path) -> Result<Self> {
         let raw = fs::read_to_string(path)
             .with_context(|| format!("Failed to read config at {:?}", path))?;
-        let config: Config = serde_json::from_str(&raw)
-            .context("Failed to parse config.json")?;
+        let config: Config = serde_json::from_str(&raw).context("Failed to parse config.json")?;
         Ok(config)
     }
+}
+
+/// Returns the default config file path used when `--config` is not given.
+///
+/// On Unix this preserves the existing behavior: a relative `config.json`,
+/// since the systemd unit already passes an explicit `--config` argument.
+/// On Windows, the natural per-machine location is under `%ProgramData%`,
+/// matching where `packaging/windows/install.ps1` writes the service's
+/// config file.
+#[cfg(unix)]
+pub fn default_config_path() -> std::path::PathBuf {
+    std::path::PathBuf::from("config.json")
+}
+
+/// See the Unix implementation above for the general rationale.
+#[cfg(windows)]
+pub fn default_config_path() -> std::path::PathBuf {
+    let program_data =
+        std::env::var("ProgramData").unwrap_or_else(|_| "C:\\ProgramData".to_string());
+    std::path::Path::new(&program_data)
+        .join("homepulse-client")
+        .join("config.json")
 }

@@ -39,9 +39,33 @@ jobs:
       - name: Run cargo test
         run: cargo test --release
 
+  build-and-test-windows:
+    name: Build and test Rust client (Windows)
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: client/homepulse-client
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry and build artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: client/homepulse-client
+
+      - name: Run cargo build
+        run: cargo build --release
+
+      - name: Run cargo test
+        run: cargo test --release
+
   docker-publish:
     name: Build and push Docker image
-    needs: build-and-test
+    needs: [build-and-test, build-and-test-windows]
     runs-on: ubuntu-latest
     if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch'
     permissions:
@@ -50,6 +74,9 @@ jobs:
     defaults:
       run:
         working-directory: client/homepulse-client
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      exists: ${{ steps.check.outputs.exists }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -118,3 +145,39 @@ jobs:
           tag_name: client-v${{ steps.version.outputs.version }}
           name: homepulse-client v${{ steps.version.outputs.version }}
           files: client/homepulse-client/homepulse-client-linux-x86_64
+
+  windows-release:
+    name: Build and publish Windows release binary
+    needs: [build-and-test-windows, docker-publish]
+    runs-on: windows-latest
+    if: needs.docker-publish.result == 'success' && needs.docker-publish.outputs.exists == 'false'
+    permissions:
+      contents: write
+    defaults:
+      run:
+        working-directory: client/homepulse-client
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry and build artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: client/homepulse-client
+
+      - name: Build release binary (windows x86_64)
+        run: cargo build --release
+
+      - name: Package Windows release zip
+        run: |
+          Compress-Archive -Path target/release/homepulse-client.exe, packaging/windows/install.ps1, packaging/windows/uninstall.ps1 -DestinationPath homepulse-client-windows-x86_64.zip
+
+      - name: Add Windows binary to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: client-v${{ needs.docker-publish.outputs.version }}
+          name: homepulse-client v${{ needs.docker-publish.outputs.version }}
+          files: client/homepulse-client/homepulse-client-windows-x86_64.zip
