@@ -127,6 +127,7 @@ export class HouseholdContextService {
               ),
             ),
           ),
+          map((memberships) => memberships.filter((m): m is HouseholdMembership => m !== null)),
         );
       }),
     );
@@ -170,13 +171,25 @@ export class HouseholdContextService {
   /**
    * Loads a household's display name and pairs it with the given role.
    *
+   * Returns null for a deactivated household (`status !== 'active'`) so it
+   * is excluded from the signed-in user's memberships entirely — this is
+   * what makes `AuthService.signInWithGoogle`'s existing "no memberships"
+   * check deny login to an owner whose only household(s) are inactive.
+   *
    * @param householdId - Id of the household document to read.
    * @param role - The signed-in user's role in that household.
    */
-  private async loadHouseholdMembership(householdId: string, role: HouseholdMembership['role']): Promise<HouseholdMembership> {
+  private async loadHouseholdMembership(
+    householdId: string,
+    role: HouseholdMembership['role'],
+  ): Promise<HouseholdMembership | null> {
     const snapshot = await getDoc(doc(this.firestore, `households/${householdId}`));
     const data = snapshot.data() as Household | undefined;
-    return { id: householdId, name: data?.name ?? householdId, role };
+    const status = data?.status ?? 'active';
+    if (status !== 'active') {
+      return null;
+    }
+    return { id: householdId, name: data?.name ?? householdId, role, status };
   }
 
   private householdIdOf(memberRef: DocumentReference): string {

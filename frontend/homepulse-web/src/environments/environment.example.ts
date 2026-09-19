@@ -5,6 +5,7 @@ export const environment = {
   inviteFunctionUrl: 'https://REGION-YOUR_PROJECT_ID.cloudfunctions.net/send-invite-email',
   issueApiKeyFunctionUrl: 'https://REGION-YOUR_PROJECT_ID.cloudfunctions.net/issue-api-key',
   listHouseholdsFunctionUrl: 'https://REGION-YOUR_PROJECT_ID.cloudfunctions.net/list-households',
+  setHouseholdStatusFunctionUrl: 'https://REGION-YOUR_PROJECT_ID.cloudfunctions.net/set-household-status',
   firebase: {
     apiKey: 'YOUR_FIREBASE_API_KEY',
     authDomain: 'YOUR_PROJECT_ID.firebaseapp.com',

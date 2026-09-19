@@ -87,4 +87,29 @@ export class AdminHouseholdsDataService {
       ),
     );
   }
+
+  /**
+   * Activates or deactivates a household. Restricted server-side to the
+   * super-admin. Deactivating immediately denies login to that household's
+   * owner and blocks its client's ingest — no data is deleted, and
+   * reactivating restores normal operation.
+   *
+   * @param householdId - Household to update.
+   * @param status - New status: `'active'` or `'inactive'`.
+   * @throws Error when the caller is not signed in, or the Cloud Function
+   *   rejects the request.
+   */
+  async setHouseholdStatus(householdId: string, status: 'active' | 'inactive'): Promise<void> {
+    const idToken = await this.authService.getIdToken();
+    if (!idToken) {
+      throw new Error('Not signed in');
+    }
+    await firstValueFrom(
+      this.http.post<{ ok: boolean }>(
+        environment.setHouseholdStatusFunctionUrl,
+        { household_id: householdId, status },
+        { headers: { Authorization: `Bearer ${idToken}` } },
+      ),
+    );
+  }
 }

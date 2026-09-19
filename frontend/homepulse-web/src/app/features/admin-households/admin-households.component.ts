@@ -83,6 +83,13 @@ import { AdminHouseholdsDataService, HouseholdSummary } from './admin-households
                   <span class="api-key-count">
                     {{ 'ADMIN_HOUSEHOLDS.API_KEY_COUNT' | translate: { count: household.apiKeyCount } }}
                   </span>
+                  <button
+                    mat-stroked-button
+                    [disabled]="updatingStatusId() === household.id"
+                    (click)="toggleStatus(household)"
+                  >
+                    {{ (household.status === 'active' ? 'ADMIN_HOUSEHOLDS.DEACTIVATE' : 'ADMIN_HOUSEHOLDS.ACTIVATE') | translate }}
+                  </button>
                 </div>
               </div>
             }
@@ -168,6 +175,7 @@ import { AdminHouseholdsDataService, HouseholdSummary } from './admin-households
       display: flex;
       align-items: center;
       gap: 0.6rem;
+      flex-wrap: wrap;
     }
 
     .api-key-count {
@@ -209,6 +217,9 @@ export class AdminHouseholdsComponent {
   /** True while an invite request is in flight. */
   inviting = signal(false);
 
+  /** Id of the household currently being activated/deactivated, or null when none is. */
+  updatingStatusId = signal<string | null>(null);
+
   readonly inviteForm = this.fb.group({
     email: ['', [Validators.required, Validators.email]],
   });
@@ -234,6 +245,33 @@ export class AdminHouseholdsComponent {
       })
       .catch(() => this.snackBar.open(this.translate.instant('ADMIN_HOUSEHOLDS.INVITE_ERROR'), '', { duration: 3000 }))
       .finally(() => this.inviting.set(false));
+  }
+
+  /**
+   * Flips a household between active and inactive. Deactivating asks for
+   * confirmation first, since it immediately denies login to that
+   * household's owner and blocks its client's ingest.
+   *
+   * @param household - Household row to toggle.
+   */
+  toggleStatus(household: HouseholdSummary): void {
+    const nextStatus = household.status === 'active' ? 'inactive' : 'active';
+    if (
+      nextStatus === 'inactive' &&
+      !window.confirm(this.translate.instant('ADMIN_HOUSEHOLDS.CONFIRM_DEACTIVATE', { name: household.name }))
+    ) {
+      return;
+    }
+
+    this.updatingStatusId.set(household.id);
+    this.adminHouseholdsDataService
+      .setHouseholdStatus(household.id, nextStatus)
+      .then(() => {
+        this.snackBar.open(this.translate.instant('ADMIN_HOUSEHOLDS.STATUS_UPDATE_SUCCESS'), '', { duration: 3000 });
+        this.refresh();
+      })
+      .catch(() => this.snackBar.open(this.translate.instant('ADMIN_HOUSEHOLDS.STATUS_UPDATE_ERROR'), '', { duration: 3000 }))
+      .finally(() => this.updatingStatusId.set(null));
   }
 
   /**

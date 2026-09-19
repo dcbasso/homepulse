@@ -1,6 +1,7 @@
 {
     "COMMON": {
         "ERROR": "An unexpected error occurred",
+        "LOADING": "Loading...",
         "SEARCH": "Search",
         "REMOVE": "Remove",
         "LIVE": "Live",
@@ -22,10 +23,11 @@
         "ABOUT": "About",
         "SIGN_OUT": "Sign out",
         "MENU": "Menu",
+        "USER_MENU": "User menu",
         "PREFERENCES": "Preferences",
         "CLIENT": "Client",
         "HOUSEHOLD": "Household",
-        "ADMIN_HOUSEHOLDS": "All households"
+        "ADMIN_HOUSEHOLDS": "Households"
     },
     "PREFERENCES": {
         "TITLE": "Preferences",
@@ -178,7 +180,12 @@
         "INVITE_ERROR": "Could not send the invite. Please try again.",
         "NO_HOUSEHOLDS": "No households found",
         "API_KEY_COUNT": "{{count}} API key(s)",
-        "ERROR": "Could not load households. Please try again."
+        "ERROR": "Could not load households. Please try again.",
+        "ACTIVATE": "Activate",
+        "DEACTIVATE": "Deactivate",
+        "CONFIRM_DEACTIVATE": "Deactivate \"{{name}}\"? Its owner will no longer be able to log in and its client will stop sending data. This can be reverted later.",
+        "STATUS_UPDATE_SUCCESS": "Household status updated",
+        "STATUS_UPDATE_ERROR": "Could not update the status. Please try again."
     },
     "CLIENT": {
         "TITLE": "Monitoring client",
@@ -200,6 +207,13 @@
         "TAB_ARCH": "Arch",
         "COMING_SOON": "Coming soon",
         "DOWNLOAD": "Download binary",
+        "QUICK_INSTALL_TITLE": "Quick install",
+        "QUICK_INSTALL_DESCRIPTION": "Download this deployment's automated installer — it already has the endpoints configured and only asks for the household ID and the API key.",
+        "QUICK_INSTALL_DOWNLOAD": "Download install-prod.sh",
+        "QUICK_INSTALL_USAGE": "Usage:",
+        "QUICK_INSTALL_STEP": "Generate the API key above and replace <API_KEY> with it — the ready-to-run command with both values filled in is also shown in the dialog when you generate a new key.",
+        "INSTALL_COMMAND_TITLE": "Install command",
+        "INSTALL_COMMAND_HINT": "Paste this command on the host where the client will be installed (requires sudo).",
         "INSTALL_STEPS_TITLE": "Install as a service (systemd)",
         "INSTALL_STEP_1": "Download the binary above and make it executable: chmod +x homepulse-client",
         "INSTALL_STEP_2": "Move it to /usr/local/bin/homepulse-client",
