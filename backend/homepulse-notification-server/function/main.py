@@ -13,6 +13,7 @@ import email.mime.text
 import logging
 import os
 import sys
+import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -108,6 +109,12 @@ _CORS_HEADERS = {
 # Roles allowed to manage a household (invite members, issue API keys) —
 # mirrors the frontend's `canManage` check (see ADR 0003 for the role model).
 _MANAGE_ROLES = {"owner", "admin"}
+
+# Email of the single platform-wide super-admin, allowed to list every
+# household (see `list_households`). Not a household role — this is
+# authorization for the platform owner across tenants, separate from
+# per-household owner/admin/member roles.
+SUPER_ADMIN_EMAIL = os.environ.get("SUPER_ADMIN_EMAIL", "")
 
 APP_BASE_URL = "https://homepulse.dantebasso.com.br"
 CLIENT_DOWNLOAD_URL = f"{APP_BASE_URL}/client"
@@ -963,6 +970,50 @@ def _find_member(db: firestore.Client, household_id: str, uid: str, email: str |
     return None
 
 
+def _find_household_id_for_invitee(db: firestore.Client, email: str) -> str | None:
+    """Finds the household an email address already belongs to, if any.
+
+    Used by `send_invite_email` to keep invites idempotent: an invitee who
+    already owns (or was already invited into) a household must not get a
+    second, duplicate one on re-invite. Matches by email since an
+    unclaimed invite is keyed by email, and a claimed one still keeps its
+    `email` field (see `HouseholdContextService.claimMembership`).
+
+    Args:
+        db: Authenticated Firestore client.
+        email: Email address to look up across all households.
+
+    Returns:
+        The ID of the household containing a `members` document with this
+        email, or None if the email isn't a member of any household.
+    """
+    for snap in db.collection_group("members").where("email", "==", email).limit(1).stream():
+        return snap.reference.parent.parent.id
+    return None
+
+
+def _create_household_for_invitee(db: firestore.Client, household_id: str, invitee_email: str) -> None:
+    """Creates a new, isolated household owned by an invited email address.
+
+    Each invite grants its own private household (see ADR 0005/0006) — an
+    invitee never joins the inviter's household, so no data is ever shared
+    between them. The member document is keyed by email until the invitee's
+    first login, at which point `HouseholdContextService.claimMembership`
+    re-keys it under their Firebase Auth uid.
+
+    Args:
+        db: Authenticated Firestore client.
+        household_id: ID to create the new household document under.
+        invitee_email: Email address of the household's sole owner.
+    """
+    _household_ref(db, household_id).set(
+        {"name": f"{invitee_email}'s household", "status": HOUSEHOLD_STATUS_ACTIVE, "api_keys": []}
+    )
+    _household_ref(db, household_id).collection("members").document(invitee_email).set(
+        {"uid": "", "email": invitee_email, "role": "owner"}
+    )
+
+
 def _is_household_member(db: firestore.Client, household_id: str, uid: str, email: str | None) -> bool:
     """Checks whether a Firebase user is a member of a household.
 
@@ -1083,20 +1134,20 @@ def send_test_alert(request) -> tuple:
 
 @functions_framework.http
 def send_invite_email(request) -> tuple:
-    """Sends an invite email to an existing member of a household.
+    """Invites an email address into its own new, isolated household.
 
-    Lets the Members screen invite (or re-invite) someone already present in
-    the household's `members[]` allowlist, pointing them at the HomePulse app
-    and the client download page. Requires a valid Firebase ID token
-    (Authorization: Bearer <token>) belonging to an owner/admin of the target
-    household; the invited address must already be a member (this is not an
-    open email relay).
+    Lets the platform admin screen invite someone by email. Each invitee
+    gets a brand-new household with themselves as its sole `owner` — no
+    data (speedtest results, IPs, monitor config) is ever shared with
+    anyone else. Restricted to `SUPER_ADMIN_EMAIL`: onboarding a new
+    account is a platform-wide action, not a per-household one (see
+    `list_households`). Re-inviting an email that already belongs to a
+    household is idempotent: no duplicate household is created, the invite
+    email is just resent.
 
     Args:
         request: HTTP request. JSON body:
-            household_id: ID of the household the caller must manage.
-            member_email: Email of the member to invite. Must already be
-                present in the household's member list.
+            member_email: Email of the person to invite.
 
     Returns:
         A tuple of (response_body, http_status_code, headers).
@@ -1108,20 +1159,20 @@ def send_invite_email(request) -> tuple:
     if claims is None:
         return {"error": "Unauthorized"}, 401, _CORS_HEADERS
 
+    if not SUPER_ADMIN_EMAIL or claims.get("email") != SUPER_ADMIN_EMAIL:
+        return {"error": "Forbidden"}, 403, _CORS_HEADERS
+
     payload = request.get_json(silent=True) or {}
-    household_id = payload.get("household_id")
     member_email = payload.get("member_email")
 
-    if not household_id or not member_email:
+    if not member_email:
         return {"error": "Invalid request"}, 400, _CORS_HEADERS
 
     db = _get_firestore_client()
-    caller_role = _get_member_role(db, household_id, claims.get("sub"), claims.get("email"))
-    if caller_role not in _MANAGE_ROLES:
-        return {"error": "Forbidden"}, 403, _CORS_HEADERS
-
-    if _get_member_role(db, household_id, "", member_email) is None:
-        return {"error": "Forbidden"}, 403, _CORS_HEADERS
+    invitee_household_id = _find_household_id_for_invitee(db, member_email)
+    if invitee_household_id is None:
+        invitee_household_id = str(uuid.uuid4())
+        _create_household_for_invitee(db, invitee_household_id, member_email)
 
     try:
         _send_email(to=member_email, subject=INVITE_EMAIL_SUBJECT, body=INVITE_EMAIL_BODY)
@@ -1129,8 +1180,10 @@ def send_invite_email(request) -> tuple:
         logger.error("Invite email to %s failed: %s", member_email, e)
         return {"error": str(e)}, 502, _CORS_HEADERS
 
-    logger.info("Invite email sent to %s (household %s) by %s", member_email, household_id, claims.get("email"))
-    return {"ok": True}, 200, _CORS_HEADERS
+    logger.info(
+        "Invite processed for %s (household %s) by %s", member_email, invitee_household_id, claims.get("email")
+    )
+    return {"ok": True, "household_id": invitee_household_id}, 200, _CORS_HEADERS
 
 
 @functions_framework.http
@@ -1187,3 +1240,72 @@ def issue_api_key(request) -> tuple:
 
     logger.info("New API key issued for household %s by %s", household_id, claims.get("email"))
     return {"api_key": raw_key, "label": label or ""}, 200, _CORS_HEADERS
+
+
+def _find_owner_email(db: firestore.Client, household_id: str) -> str | None:
+    """Finds the email of a household's `owner`, falling back to any member.
+
+    Args:
+        db: Authenticated Firestore client.
+        household_id: ID of the household to look up.
+
+    Returns:
+        The owner's email, the first member's email if no owner is found, or
+        None if the household has no members at all.
+    """
+    members_ref = _household_ref(db, household_id).collection("members")
+    fallback_email = None
+    for snap in members_ref.stream():
+        data = snap.to_dict()
+        if data.get("role") == "owner":
+            return data.get("email")
+        if fallback_email is None:
+            fallback_email = data.get("email")
+    return fallback_email
+
+
+@functions_framework.http
+def list_households(request) -> tuple:
+    """Lists every household on the platform, for the super-admin overview.
+
+    Restricted to `SUPER_ADMIN_EMAIL` (see ADR: platform-wide oversight is a
+    separate concern from per-household owner/admin roles — it lets the
+    platform owner see who is using the system without seeing any
+    household's private data, i.e. no speedtest/incident/IP data is
+    returned here, only account-level metadata).
+
+    Args:
+        request: HTTP request. GET, no body. Requires a valid Firebase ID
+            token (Authorization: Bearer <token>) belonging to the
+            super-admin.
+
+    Returns:
+        A tuple of (response_body, http_status_code, headers), where the
+        body is `{"households": [{"id", "name", "status", "owner_email",
+        "api_key_count"}, ...]}`.
+    """
+    if request.method == "OPTIONS":
+        return "", 204, _CORS_HEADERS
+
+    claims = _verify_firebase_token(request)
+    if claims is None:
+        return {"error": "Unauthorized"}, 401, _CORS_HEADERS
+
+    if not SUPER_ADMIN_EMAIL or claims.get("email") != SUPER_ADMIN_EMAIL:
+        return {"error": "Forbidden"}, 403, _CORS_HEADERS
+
+    db = _get_firestore_client()
+    households = []
+    for snap in db.collection(COLLECTION_HOUSEHOLDS).stream():
+        data = snap.to_dict()
+        households.append(
+            {
+                "id": snap.id,
+                "name": data.get("name", ""),
+                "status": data.get("status", ""),
+                "owner_email": _find_owner_email(db, snap.id),
+                "api_key_count": len(data.get("api_keys", [])),
+            }
+        )
+
+    return {"households": households}, 200, _CORS_HEADERS

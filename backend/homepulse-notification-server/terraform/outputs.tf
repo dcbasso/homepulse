@@ -26,3 +26,8 @@ output "issue_api_key_url" {
   description = "Public URL of the issue-api-key Cloud Function. Copy into the frontend's environment.ts/environment.prod.ts as issueApiKeyFunctionUrl."
   value       = google_cloudfunctions2_function.issue_api_key.service_config[0].uri
 }
+
+output "list_households_url" {
+  description = "Public URL of the list-households Cloud Function. Copy into the frontend's environment.ts/environment.prod.ts as listHouseholdsFunctionUrl."
+  value       = google_cloudfunctions2_function.list_households.service_config[0].uri
+}
