@@ -1,6 +1,7 @@
 import { Routes } from '@angular/router';
 import { authGuard } from './core/auth.guard';
 import { householdGuard } from './core/household.guard';
+import { superAdminGuard } from './core/super-admin.guard';
 
 export const routes: Routes = [
   {
@@ -41,12 +42,6 @@ export const routes: Routes = [
     canActivate: [authGuard, householdGuard],
   },
   {
-    path: 'members',
-    loadComponent: () =>
-      import('./features/members/members.component').then((m) => m.MembersComponent),
-    canActivate: [authGuard, householdGuard],
-  },
-  {
     path: 'client',
     loadComponent: () =>
       import('./features/client/client.component').then((m) => m.ClientComponent),
@@ -63,6 +58,14 @@ export const routes: Routes = [
     loadComponent: () =>
       import('./features/about/about.component').then((m) => m.AboutComponent),
     canActivate: [authGuard, householdGuard],
+  },
+  {
+    path: 'admin/households',
+    loadComponent: () =>
+      import('./features/admin-households/admin-households.component').then(
+        (m) => m.AdminHouseholdsComponent,
+      ),
+    canActivate: [authGuard, superAdminGuard],
   },
   { path: '', redirectTo: 'dashboard', pathMatch: 'full' },
   { path: '**', redirectTo: 'dashboard' },

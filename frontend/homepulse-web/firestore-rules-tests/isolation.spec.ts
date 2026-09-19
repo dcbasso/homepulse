@@ -224,4 +224,32 @@ describe('membership write authorization', () => {
         .set({ uid: '', email: 'new@example.com', role: 'member' }),
     );
   });
+
+  it('lets an invitee claim their owner-role member doc in a freshly created, single-member household', async () => {
+    // Mirrors what the invite Cloud Function creates server-side (Admin
+    // SDK, bypasses rules) when an email is invited: a brand-new household
+    // with only an email-keyed `owner` member doc — never any pre-existing
+    // uid-keyed one.
+    const NEW_HOUSE = 'new-invitee-house';
+    const INVITEE_UID = 'invitee-uid';
+    const INVITEE_EMAIL = 'invitee@example.com';
+
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore();
+      await db.doc(`households/${NEW_HOUSE}`).set({ name: `${INVITEE_EMAIL}'s household`, status: 'active' });
+      await db.doc(`households/${NEW_HOUSE}/members/${INVITEE_EMAIL}`).set({
+        uid: '',
+        email: INVITEE_EMAIL,
+        role: 'owner',
+      });
+    });
+
+    const invitee = testEnv.authenticatedContext(INVITEE_UID, { email: INVITEE_EMAIL });
+    await assertSucceeds(
+      invitee
+        .firestore()
+        .doc(`households/${NEW_HOUSE}/members/${INVITEE_UID}`)
+        .set({ uid: INVITEE_UID, email: INVITEE_EMAIL, role: 'owner' }),
+    );
+  });
 });

@@ -14,6 +14,7 @@ import { TranslatePipe } from '@ngx-translate/core';
 import { map } from 'rxjs';
 import { AuthService } from '../../core/auth.service';
 import { HouseholdContextService } from '../../core/household-context.service';
+import { environment } from '../../../environments/environment';
 
 /** Max viewport width, in pixels, at which the navbar switches to the drawer layout. */
 const MOBILE_BREAKPOINT = '(max-width: 768px)';
@@ -63,17 +64,17 @@ const MOBILE_BREAKPOINT = '(max-width: 768px)';
           <a mat-list-item routerLink="/settings" routerLinkActive="active-link" (click)="drawer.close()">
             {{ 'NAV.SETTINGS' | translate }}
           </a>
-          @if (canManageHousehold()) {
-            <a mat-list-item routerLink="/members" routerLinkActive="active-link" (click)="drawer.close()">
-              {{ 'NAV.MEMBERS' | translate }}
-            </a>
-          }
           <a mat-list-item routerLink="/client" routerLinkActive="active-link" (click)="drawer.close()">
             {{ 'NAV.CLIENT' | translate }}
           </a>
           <a mat-list-item routerLink="/about" routerLinkActive="active-link" (click)="drawer.close()">
             {{ 'NAV.ABOUT' | translate }}
           </a>
+          @if (isSuperAdmin()) {
+            <a mat-list-item routerLink="/admin/households" routerLinkActive="active-link" (click)="drawer.close()">
+              {{ 'NAV.ADMIN_HOUSEHOLDS' | translate }}
+            </a>
+          }
 
           <mat-divider />
 
@@ -128,17 +129,17 @@ const MOBILE_BREAKPOINT = '(max-width: 768px)';
               <a mat-button routerLink="/settings" routerLinkActive="active-link">
                 {{ 'NAV.SETTINGS' | translate }}
               </a>
-              @if (canManageHousehold()) {
-                <a mat-button routerLink="/members" routerLinkActive="active-link">
-                  {{ 'NAV.MEMBERS' | translate }}
-                </a>
-              }
               <a mat-button routerLink="/client" routerLinkActive="active-link">
                 {{ 'NAV.CLIENT' | translate }}
               </a>
               <a mat-button routerLink="/about" routerLinkActive="active-link">
                 {{ 'NAV.ABOUT' | translate }}
               </a>
+              @if (isSuperAdmin()) {
+                <a mat-button routerLink="/admin/households" routerLinkActive="active-link">
+                  {{ 'NAV.ADMIN_HOUSEHOLDS' | translate }}
+                </a>
+              }
             </nav>
           }
 
@@ -226,7 +227,11 @@ export class NavbarComponent {
   protected activeHouseholdId = computed(() => this.householdContext.activeHousehold()?.id ?? null);
 
   /** True when the signed-in user can manage the active household's members. */
-  protected canManageHousehold = this.householdContext.canManageActiveHousehold;
+  /** True when the signed-in user is the platform-wide super-admin (see `superAdminGuard`). */
+  protected isSuperAdmin = toSignal(
+    this.authService.currentUser$.pipe(map((u) => u?.email === environment.superAdminEmail)),
+    { initialValue: false },
+  );
 
   /**
    * Signs out the current user and navigates to the login screen.

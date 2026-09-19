@@ -31,7 +31,7 @@ cp .firebaserc.example                           .firebaserc
 ```typescript
 export const environment = {
   production: false,              // true in environment.prod.ts
-  allowedEmail: 'you@gmail.com', // only this email can sign in
+  superAdminEmail: 'you@gmail.com', // sees the platform-wide households list
   firebase: {
     apiKey: '...',
     authDomain: 'YOUR_PROJECT_ID.firebaseapp.com',

@@ -34,13 +34,21 @@ import { ApiKeyDialogComponent } from './components/api-key-dialog/api-key-dialo
       @if (canManage()) {
         <mat-card class="client-card">
           <mat-card-content class="key-section">
-            <div>
-              <div class="household-id-label">{{ 'CLIENT.HOUSEHOLD_ID_LABEL' | translate }}</div>
+            <div class="key-field">
+              <div class="key-field-label">{{ 'CLIENT.HOUSEHOLD_ID_LABEL' | translate }}</div>
               <code>{{ householdId() }}</code>
             </div>
-            <button mat-raised-button color="primary" [disabled]="generatingKey()" (click)="generateKey()">
-              {{ 'CLIENT.GENERATE_KEY' | translate }}
-            </button>
+            <div class="key-field">
+              <div class="key-field-label">{{ 'CLIENT.API_KEY_LABEL' | translate }}</div>
+              <div class="key-field-row">
+                <span class="api-key-status">
+                  {{ (hasApiKey() ? 'CLIENT.API_KEY_STATUS_EXISTS' : 'CLIENT.API_KEY_STATUS_MISSING') | translate }}
+                </span>
+                <button mat-raised-button color="primary" [disabled]="generatingKey()" (click)="generateKey()">
+                  {{ (hasApiKey() ? 'CLIENT.REGENERATE_KEY' : 'CLIENT.GENERATE_KEY') | translate }}
+                </button>
+              </div>
+            </div>
           </mat-card-content>
         </mat-card>
       }
@@ -106,14 +114,24 @@ import { ApiKeyDialogComponent } from './components/api-key-dialog/api-key-dialo
 
     .key-section {
       display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .key-field-label {
+      font-size: 0.75rem;
+      color: var(--mat-sys-on-surface-variant);
+    }
+
+    .key-field-row {
+      display: flex;
       align-items: center;
       justify-content: space-between;
       gap: 1rem;
       flex-wrap: wrap;
     }
 
-    .household-id-label {
-      font-size: 0.75rem;
+    .api-key-status {
       color: var(--mat-sys-on-surface-variant);
     }
 
@@ -144,6 +162,9 @@ export class ClientComponent {
   /** Id of the active household, shown so it can be copied into the client's config.json. */
   householdId = signal<string | null>(null);
 
+  /** True when the active household already has at least one API key issued. */
+  hasApiKey = signal(false);
+
   /** True while an API key generation request is in flight. */
   generatingKey = signal(false);
 
@@ -153,7 +174,10 @@ export class ClientComponent {
   constructor() {
     this.householdContext.activeHousehold$.pipe(
       takeUntilDestroyed(this.destroyRef),
-    ).subscribe((household) => this.householdId.set(household?.id ?? null));
+    ).subscribe((household) => {
+      this.householdId.set(household?.id ?? null);
+      this.refreshApiKeyStatus(household?.id ?? null);
+    });
   }
 
   /**
@@ -163,8 +187,27 @@ export class ClientComponent {
   generateKey(): void {
     this.generatingKey.set(true);
     this.clientDataService.issueApiKey()
-      .then((apiKey) => this.dialog.open(ApiKeyDialogComponent, { data: { apiKey } }))
+      .then((apiKey) => {
+        this.hasApiKey.set(true);
+        this.dialog.open(ApiKeyDialogComponent, { data: { apiKey } });
+      })
       .catch(() => this.snackBar.open(this.translate.instant('CLIENT.GENERATE_KEY_ERROR'), '', { duration: 3000 }))
       .finally(() => this.generatingKey.set(false));
+  }
+
+  /**
+   * Refreshes {@link hasApiKey} for the given household, so the "generate"
+   * vs. "regenerate" wording reflects whether a key already exists.
+   *
+   * @param householdId - Household to check, or null when none is active.
+   */
+  private refreshApiKeyStatus(householdId: string | null): void {
+    if (!householdId) {
+      this.hasApiKey.set(false);
+      return;
+    }
+    this.clientDataService.hasApiKey(householdId)
+      .then((exists) => this.hasApiKey.set(exists))
+      .catch(() => this.hasApiKey.set(false));
   }
 }

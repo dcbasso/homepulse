@@ -18,6 +18,8 @@ export interface HouseholdMember {
 export interface Household {
   name: string;
   status: string;
+  /** SHA-256 hashes (plus metadata) of issued ingest API keys — never the raw key. */
+  api_keys?: unknown[];
 }
 
 /** A household the signed-in user belongs to, with their role in it. */

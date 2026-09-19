@@ -23,9 +23,9 @@
         "SIGN_OUT": "Cerrar sesión",
         "MENU": "Menú",
         "PREFERENCES": "Preferencias",
-        "MEMBERS": "Miembros",
         "CLIENT": "Client",
-        "HOUSEHOLD": "Hogar"
+        "HOUSEHOLD": "Hogar",
+        "ADMIN_HOUSEHOLDS": "Todos los hogares"
     },
     "PREFERENCES": {
         "TITLE": "Preferencias",
@@ -169,27 +169,21 @@
         "TEST_SEND_SUCCESS": "Prueba enviada a {{count}} destinatario(s)",
         "TEST_SEND_ERROR": "Error al enviar la prueba"
     },
-    "MEMBERS": {
-        "TITLE": "Miembros",
-        "ADD": "Agregar miembro",
+    "ADMIN_HOUSEHOLDS": {
+        "TITLE": "Todos los hogares",
+        "INVITE": "Invitar",
+        "INVITE_HINT": "Invitar por correo crea un hogar propio y privado para esa persona — sus datos nunca se comparten con nadie.",
         "EMAIL": "Correo electrónico",
-        "ROLE": "Rol",
-        "ROLE_OWNER": "Propietario",
-        "ROLE_ADMIN": "Administrador",
-        "ROLE_MEMBER": "Miembro",
-        "YOU": "Tú",
-        "NO_MEMBERS": "No se encontraron miembros",
-        "ADD_SUCCESS": "Miembro agregado con éxito",
-        "REMOVE_SUCCESS": "Miembro eliminado con éxito",
-        "ROLE_UPDATE_SUCCESS": "Rol actualizado correctamente",
-        "ERROR": "Algo salió mal. Inténtalo de nuevo.",
-        "INVITE": "Enviar invitación",
         "INVITE_SUCCESS": "Invitación enviada con éxito",
-        "INVITE_ERROR": "No se pudo enviar la invitación. Inténtalo de nuevo."
+        "INVITE_ERROR": "No se pudo enviar la invitación. Inténtalo de nuevo.",
+        "NO_HOUSEHOLDS": "No se encontraron hogares",
+        "API_KEY_COUNT": "{{count}} API key(s)",
+        "ERROR": "No se pudieron cargar los hogares. Inténtalo de nuevo."
     },
     "CLIENT": {
         "TITLE": "Cliente de monitoreo",
-        "GENERATE_KEY": "Generar nueva API key",
+        "GENERATE_KEY": "Generar API key",
+        "REGENERATE_KEY": "Generar nueva API key",
         "GENERATE_KEY_ERROR": "No se pudo generar la clave. Inténtalo de nuevo.",
         "KEY_DIALOG_TITLE": "Tu nueva API key",
         "KEY_WARNING": "Copia esta clave ahora — no se puede recuperar después.",
@@ -197,6 +191,9 @@
         "COPIED": "¡Copiado!",
         "CLOSE": "Cerrar",
         "HOUSEHOLD_ID_LABEL": "ID del hogar",
+        "API_KEY_LABEL": "API key",
+        "API_KEY_STATUS_EXISTS": "Clave ya generada",
+        "API_KEY_STATUS_MISSING": "Todavía no se generó ninguna clave",
         "TAB_LINUX": "Standalone Linux",
         "TAB_WINDOWS": "Windows",
         "TAB_DEBIAN": "Debian/Ubuntu",

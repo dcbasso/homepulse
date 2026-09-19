@@ -44,3 +44,8 @@ variable "firestore_database" {
   default     = "speedtest-monitordb-one"
   description = "Name of the Firestore database used by the client and this function (not the project's \"(default)\" database)"
 }
+
+variable "super_admin_email" {
+  type        = string
+  description = "Email of the single platform-wide super-admin allowed to call list-households and see every household's account-level metadata (name, status, owner email) — never their private data."
+}

@@ -1,7 +1,9 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
+import { Firestore, doc, getDoc } from '@angular/fire/firestore';
 import { firstValueFrom } from 'rxjs';
 import { AuthService } from '../../core/auth.service';
+import { Household } from '../../core/models/household.model';
 import { HouseholdContextService } from '../../core/household-context.service';
 import { environment } from '../../../environments/environment';
 
@@ -32,6 +34,7 @@ export interface ClientRelease {
 @Injectable({ providedIn: 'root' })
 export class ClientDataService {
   private http = inject(HttpClient);
+  private firestore = inject(Firestore);
   private authService = inject(AuthService);
   private householdContext = inject(HouseholdContextService);
 
@@ -70,5 +73,18 @@ export class ClientDataService {
    */
   getLinuxRelease(): ClientRelease {
     return { version: CLIENT_VERSION, downloadUrl: LINUX_DOWNLOAD_PATH };
+  }
+
+  /**
+   * Checks whether the given household already has at least one ingest API
+   * key issued, so the UI can offer "generate" vs. "regenerate" wording.
+   *
+   * @param householdId - Household to check.
+   * @returns True when the household's `api_keys` array is non-empty.
+   */
+  async hasApiKey(householdId: string): Promise<boolean> {
+    const snapshot = await getDoc(doc(this.firestore, 'households', householdId));
+    const household = snapshot.data() as Household | undefined;
+    return (household?.api_keys?.length ?? 0) > 0;
   }
 }

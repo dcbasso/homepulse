@@ -23,9 +23,9 @@
         "SIGN_OUT": "Sign out",
         "MENU": "Menu",
         "PREFERENCES": "Preferences",
-        "MEMBERS": "Members",
         "CLIENT": "Client",
-        "HOUSEHOLD": "Household"
+        "HOUSEHOLD": "Household",
+        "ADMIN_HOUSEHOLDS": "All households"
     },
     "PREFERENCES": {
         "TITLE": "Preferences",
@@ -169,27 +169,21 @@
         "TEST_SEND_SUCCESS": "Test sent to {{count}} recipient(s)",
         "TEST_SEND_ERROR": "Test send failed"
     },
-    "MEMBERS": {
-        "TITLE": "Members",
-        "ADD": "Add member",
+    "ADMIN_HOUSEHOLDS": {
+        "TITLE": "All households",
+        "INVITE": "Invite",
+        "INVITE_HINT": "Inviting by email creates that person their own, private household — their data is never shared with anyone.",
         "EMAIL": "Email",
-        "ROLE": "Role",
-        "ROLE_OWNER": "Owner",
-        "ROLE_ADMIN": "Admin",
-        "ROLE_MEMBER": "Member",
-        "YOU": "You",
-        "NO_MEMBERS": "No members found",
-        "ADD_SUCCESS": "Member added successfully",
-        "REMOVE_SUCCESS": "Member removed successfully",
-        "ROLE_UPDATE_SUCCESS": "Role updated successfully",
-        "ERROR": "Something went wrong. Please try again.",
-        "INVITE": "Send invite",
         "INVITE_SUCCESS": "Invite sent successfully",
-        "INVITE_ERROR": "Could not send the invite. Please try again."
+        "INVITE_ERROR": "Could not send the invite. Please try again.",
+        "NO_HOUSEHOLDS": "No households found",
+        "API_KEY_COUNT": "{{count}} API key(s)",
+        "ERROR": "Could not load households. Please try again."
     },
     "CLIENT": {
         "TITLE": "Monitoring client",
-        "GENERATE_KEY": "Generate new API key",
+        "GENERATE_KEY": "Generate API key",
+        "REGENERATE_KEY": "Generate new API key",
         "GENERATE_KEY_ERROR": "Could not generate the key. Please try again.",
         "KEY_DIALOG_TITLE": "Your new API key",
         "KEY_WARNING": "Copy this key now — it cannot be recovered afterward.",
@@ -197,6 +191,9 @@
         "COPIED": "Copied!",
         "CLOSE": "Close",
         "HOUSEHOLD_ID_LABEL": "Household ID",
+        "API_KEY_LABEL": "API key",
+        "API_KEY_STATUS_EXISTS": "Key already generated",
+        "API_KEY_STATUS_MISSING": "No key generated yet",
         "TAB_LINUX": "Standalone Linux",
         "TAB_WINDOWS": "Windows",
         "TAB_DEBIAN": "Debian/Ubuntu",
