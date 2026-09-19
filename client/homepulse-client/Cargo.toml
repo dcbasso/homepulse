@@ -1,18 +1,45 @@
 [package]
 name = "homepulse-client"
-version = "0.1.1"
+version = "2.0.0"
 edition = "2021"
 
 [[bin]]
 name = "homepulse-client"
 path = "src/main.rs"
 
+[features]
+default = ["cloudflare", "librespeed", "ookla"]
+# All three providers are plain HTTP against reqwest (already a dependency)
+# plus, for `ookla`, XML parsing of the speedtest.net server feed — none of
+# them pull in anything heavy, so there is no "minimal build" feature to
+# drop for OpenWrt anymore. Kept as separate features regardless, so a
+# provider can still be dropped deliberately (e.g. no LibreSpeed backend to
+# point at) without touching the others' code.
+cloudflare = []
+librespeed = []
+ookla = []
+
 [dependencies]
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "process", "time"] }
+reqwest = { version = "0.12", features = ["json", "stream", "rustls-tls", "http2"], default-features = false }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time"] }
 anyhow = "1"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 clap = { version = "4", features = ["derive"] }
+async-trait = "0.1"
+futures-util = "0.3"
+bytes = "1"
+rand = "0.9"
+quick-xml = { version = "0.39", features = ["serialize"] }
+
+[profile.release]
+# Optimize the shipped binary for size, not speed: this runs as a background
+# daemon (often on constrained hardware like an OpenWrt router), not a
+# throughput-sensitive workload — the HTTP round-trips dominate runtime cost
+# either way.
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = true
