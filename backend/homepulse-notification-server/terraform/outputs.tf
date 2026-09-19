@@ -31,3 +31,8 @@ output "list_households_url" {
   description = "Public URL of the list-households Cloud Function. Copy into the frontend's environment.ts/environment.prod.ts as listHouseholdsFunctionUrl."
   value       = google_cloudfunctions2_function.list_households.service_config[0].uri
 }
+
+output "set_household_status_url" {
+  description = "Public URL of the set-household-status Cloud Function. Copy into the frontend's environment.ts/environment.prod.ts as setHouseholdStatusFunctionUrl."
+  value       = google_cloudfunctions2_function.set_household_status.service_config[0].uri
+}

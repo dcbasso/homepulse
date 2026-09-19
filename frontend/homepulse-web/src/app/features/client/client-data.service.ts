@@ -21,6 +21,17 @@ export const CLIENT_VERSION = '0.1.1';
 /** Path (relative to the site root) the Linux binary is served from. */
 const LINUX_DOWNLOAD_PATH = '/downloads/homepulse-client-linux-x86_64';
 
+/**
+ * Path (relative to the site root) of `install-prod.sh`, the one-command
+ * installer pre-configured for this deployment (project
+ * speedtest-monitor-b5cd2) — mirrors
+ * `client/homepulse-client/packaging/install-prod.sh`. Unlike the generic
+ * `install.sh`, it only needs `household_id` and `api_key`, since every
+ * other argument (Cloud Function URLs, binary download URL) is fixed for
+ * this deployment.
+ */
+const INSTALL_PROD_SCRIPT_PATH = '/downloads/install-prod.sh';
+
 /** The downloadable homepulse-client Linux build bundled with this deploy. */
 export interface ClientRelease {
   version: string;
@@ -86,5 +97,38 @@ export class ClientDataService {
     const snapshot = await getDoc(doc(this.firestore, 'households', householdId));
     const household = snapshot.data() as Household | undefined;
     return (household?.api_keys?.length ?? 0) > 0;
+  }
+
+  /**
+   * Returns the download URL of `install-prod.sh`, the one-command
+   * installer pre-configured for this deployment.
+   */
+  getInstallProdScriptUrl(): string {
+    return `${window.location.origin}${INSTALL_PROD_SCRIPT_PATH}`;
+  }
+
+  /**
+   * Builds the ready-to-run shell command that downloads and executes
+   * `install-prod.sh` for the given household and API key, so the user only
+   * has to paste one line on the target host.
+   *
+   * @param householdId - Household to install the client for.
+   * @param apiKey - Freshly issued ingest API key.
+   */
+  getInstallCommand(householdId: string, apiKey: string): string {
+    const scriptUrl = this.getInstallProdScriptUrl();
+    return `curl -fsSL ${scriptUrl} -o install-prod.sh && chmod +x install-prod.sh && sudo ./install-prod.sh -hh ${householdId} -apikey ${apiKey}`;
+  }
+
+  /**
+   * Builds a usage example of `install-prod.sh` for the given household,
+   * with a literal `<API_KEY>` placeholder — shown on the Client screen so
+   * the command can be reconstructed by hand from an already-copied key.
+   *
+   * @param householdId - Household to show in the example, or null when
+   *   none is active yet.
+   */
+  getInstallUsageExample(householdId: string | null): string {
+    return `sudo ./install-prod.sh -hh ${householdId ?? '<HOUSEHOLD_ID>'} -apikey <API_KEY>`;
   }
 }

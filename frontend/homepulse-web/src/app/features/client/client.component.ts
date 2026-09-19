@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, DestroyRef, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
@@ -58,6 +58,20 @@ import { ApiKeyDialogComponent } from './components/api-key-dialog/api-key-dialo
           <mat-tab-group>
             <mat-tab [label]="'CLIENT.TAB_LINUX' | translate">
               <div class="tab-content">
+                @if (canManage()) {
+                  <div class="quick-install-box">
+                    <h3>{{ 'CLIENT.QUICK_INSTALL_TITLE' | translate }}</h3>
+                    <p>{{ 'CLIENT.QUICK_INSTALL_DESCRIPTION' | translate }}</p>
+                    <a mat-stroked-button color="primary" [href]="installScriptUrl" download="install-prod.sh">
+                      <mat-icon>download</mat-icon>
+                      {{ 'CLIENT.QUICK_INSTALL_DOWNLOAD' | translate }}
+                    </a>
+                    <p class="quick-install-usage-label">{{ 'CLIENT.QUICK_INSTALL_USAGE' | translate }}</p>
+                    <code class="quick-install-usage">{{ installUsageExample() }}</code>
+                    <p>{{ 'CLIENT.QUICK_INSTALL_STEP' | translate }}</p>
+                  </div>
+                }
+
                 <a mat-raised-button color="primary" [href]="release.downloadUrl" download="homepulse-client-linux-x86_64">
                   <mat-icon>download</mat-icon>
                   {{ 'CLIENT.DOWNLOAD' | translate }} (v{{ release.version }})
@@ -146,6 +160,31 @@ import { ApiKeyDialogComponent } from './components/api-key-dialog/api-key-dialo
     .install-steps {
       padding-left: 1.25rem;
     }
+
+    .quick-install-box {
+      background: var(--mat-sys-surface-container-high);
+      border-radius: 8px;
+      padding: 1rem 1.25rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .quick-install-box h3 {
+      margin-top: 0;
+    }
+
+    .quick-install-usage-label {
+      margin-bottom: 0.25rem;
+      font-size: 0.85rem;
+    }
+
+    .quick-install-usage {
+      display: block;
+      background: var(--mat-sys-surface-container-highest);
+      border-radius: 6px;
+      padding: 0.5rem 0.75rem;
+      overflow-wrap: anywhere;
+      font-size: 0.85rem;
+    }
   `],
 })
 export class ClientComponent {
@@ -171,6 +210,12 @@ export class ClientComponent {
   /** The homepulse-client Linux build bundled with this deploy. */
   release: ClientRelease = this.clientDataService.getLinuxRelease();
 
+  /** Download URL of `install-prod.sh`, the one-command installer for this deployment. */
+  installScriptUrl: string = this.clientDataService.getInstallProdScriptUrl();
+
+  /** Usage example of `install-prod.sh` with the active household's id filled in. */
+  installUsageExample = computed(() => this.clientDataService.getInstallUsageExample(this.householdId()));
+
   constructor() {
     this.householdContext.activeHousehold$.pipe(
       takeUntilDestroyed(this.destroyRef),
@@ -189,7 +234,7 @@ export class ClientComponent {
     this.clientDataService.issueApiKey()
       .then((apiKey) => {
         this.hasApiKey.set(true);
-        this.dialog.open(ApiKeyDialogComponent, { data: { apiKey } });
+        this.dialog.open(ApiKeyDialogComponent, { data: { apiKey, householdId: this.householdId() ?? '' } });
       })
       .catch(() => this.snackBar.open(this.translate.instant('CLIENT.GENERATE_KEY_ERROR'), '', { duration: 3000 }))
       .finally(() => this.generatingKey.set(false));

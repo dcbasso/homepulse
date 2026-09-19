@@ -51,6 +51,15 @@ COLLECTION_INCIDENTS = "incidents"
 # the periodic outage check. Mirrors ingest.py's HOUSEHOLD_STATUS_ACTIVE.
 HOUSEHOLD_STATUS_ACTIVE = "active"
 
+# Value of `households/{id}.status` that marks a household as deactivated by
+# the platform admin — excluded from the outage check (see
+# _list_active_household_ids) and rejected by ingest.py, without deleting
+# any of its data.
+HOUSEHOLD_STATUS_INACTIVE = "inactive"
+
+# Every value `set_household_status` accepts for `households/{id}.status`.
+_VALID_HOUSEHOLD_STATUSES = {HOUSEHOLD_STATUS_ACTIVE, HOUSEHOLD_STATUS_INACTIVE}
+
 # Number of consecutive checks that must see a stale heartbeat before an
 # outage is confirmed and an alert is sent. Debounces single-sample false
 # positives (e.g. a transient Firestore read anomaly) without meaningfully
@@ -1242,26 +1251,26 @@ def issue_api_key(request) -> tuple:
     return {"api_key": raw_key, "label": label or ""}, 200, _CORS_HEADERS
 
 
-def _find_owner_email(db: firestore.Client, household_id: str) -> str | None:
-    """Finds the email of a household's `owner`, falling back to any member.
+def _owner_emails_by_household(db: firestore.Client) -> dict[str, str]:
+    """Maps every household to its owner's email in a single Firestore query.
+
+    Replaces one `members` stream per household with a single
+    `collectionGroup` query across all households' `members` subcollections,
+    filtered to `role == "owner"` — avoids the N+1 read pattern that made
+    `list_households` slow to load on the admin screen.
 
     Args:
         db: Authenticated Firestore client.
-        household_id: ID of the household to look up.
 
     Returns:
-        The owner's email, the first member's email if no owner is found, or
-        None if the household has no members at all.
+        Dict mapping household ID to its owner's email. Households with no
+        `owner`-role member (not expected in normal operation) are absent.
     """
-    members_ref = _household_ref(db, household_id).collection("members")
-    fallback_email = None
-    for snap in members_ref.stream():
-        data = snap.to_dict()
-        if data.get("role") == "owner":
-            return data.get("email")
-        if fallback_email is None:
-            fallback_email = data.get("email")
-    return fallback_email
+    owners_query = db.collection_group("members").where("role", "==", "owner")
+    return {
+        snap.reference.parent.parent.id: snap.to_dict().get("email")
+        for snap in owners_query.stream()
+    }
 
 
 @functions_framework.http
@@ -1295,6 +1304,7 @@ def list_households(request) -> tuple:
         return {"error": "Forbidden"}, 403, _CORS_HEADERS
 
     db = _get_firestore_client()
+    owner_emails = _owner_emails_by_household(db)
     households = []
     for snap in db.collection(COLLECTION_HOUSEHOLDS).stream():
         data = snap.to_dict()
@@ -1303,9 +1313,58 @@ def list_households(request) -> tuple:
                 "id": snap.id,
                 "name": data.get("name", ""),
                 "status": data.get("status", ""),
-                "owner_email": _find_owner_email(db, snap.id),
+                "owner_email": owner_emails.get(snap.id),
                 "api_key_count": len(data.get("api_keys", [])),
             }
         )
 
     return {"households": households}, 200, _CORS_HEADERS
+
+
+@functions_framework.http
+def set_household_status(request) -> tuple:
+    """Activates or deactivates a household, for the super-admin overview.
+
+    Deactivating a household stops it being counted by the periodic outage
+    check (see `_list_active_household_ids`) and makes `ingest_heartbeat`/
+    `ingest_speedtest` reject its client's data (see `ingest.py`), and the
+    frontend additionally signs out and denies login to a user whose only
+    household(s) are inactive (see `HouseholdContextService`). No data is
+    deleted — reactivating restores normal operation immediately.
+
+    Restricted to `SUPER_ADMIN_EMAIL`, same as `list_households`.
+
+    Args:
+        request: HTTP request. JSON body:
+            household_id: ID of the household to update.
+            status: New status, either "active" or "inactive".
+
+    Returns:
+        A tuple of (response_body, http_status_code, headers).
+    """
+    if request.method == "OPTIONS":
+        return "", 204, _CORS_HEADERS
+
+    claims = _verify_firebase_token(request)
+    if claims is None:
+        return {"error": "Unauthorized"}, 401, _CORS_HEADERS
+
+    if not SUPER_ADMIN_EMAIL or claims.get("email") != SUPER_ADMIN_EMAIL:
+        return {"error": "Forbidden"}, 403, _CORS_HEADERS
+
+    payload = request.get_json(silent=True) or {}
+    household_id = payload.get("household_id")
+    status = payload.get("status")
+
+    if not household_id or status not in _VALID_HOUSEHOLD_STATUSES:
+        return {"error": "Invalid request"}, 400, _CORS_HEADERS
+
+    db = _get_firestore_client()
+    household_ref = _household_ref(db, household_id)
+    if not household_ref.get().exists:
+        return {"error": "Household not found"}, 404, _CORS_HEADERS
+
+    household_ref.update({"status": status})
+
+    logger.info("Household %s status set to %s by %s", household_id, status, claims.get("email"))
+    return {"ok": True}, 200, _CORS_HEADERS

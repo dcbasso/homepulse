@@ -9,10 +9,12 @@ import {
 } from '@angular/material/dialog';
 import { MatIconModule } from '@angular/material/icon';
 import { TranslatePipe } from '@ngx-translate/core';
+import { ClientDataService } from '../../client-data.service';
 
 /** Data passed into {@link ApiKeyDialogComponent} when it is opened. */
 export interface ApiKeyDialogData {
   apiKey: string;
+  householdId: string;
 }
 
 /**
@@ -36,6 +38,18 @@ export interface ApiKeyDialogData {
         </button>
       </div>
       @if (copied()) {
+        <p class="copied-hint">{{ 'CLIENT.COPIED' | translate }}</p>
+      }
+
+      <p class="install-command-title">{{ 'CLIENT.INSTALL_COMMAND_TITLE' | translate }}</p>
+      <p class="install-command-hint">{{ 'CLIENT.INSTALL_COMMAND_HINT' | translate }}</p>
+      <div class="key-box">
+        <code>{{ installCommand }}</code>
+        <button mat-icon-button [attr.aria-label]="'CLIENT.COPY' | translate" (click)="copyCommand()">
+          <mat-icon>{{ commandCopied() ? 'check' : 'content_copy' }}</mat-icon>
+        </button>
+      </div>
+      @if (commandCopied()) {
         <p class="copied-hint">{{ 'CLIENT.COPIED' | translate }}</p>
       }
     </mat-dialog-content>
@@ -66,19 +80,44 @@ export interface ApiKeyDialogData {
       font-size: 0.85rem;
       margin-bottom: 0;
     }
+    .install-command-title {
+      font-weight: 500;
+      margin-bottom: 0;
+    }
+    .install-command-hint {
+      font-size: 0.85rem;
+      color: var(--mat-sys-on-surface-variant);
+      margin-top: 0.25rem;
+    }
   `],
 })
 export class ApiKeyDialogComponent {
+  private clientDataService = inject(ClientDataService);
+
   protected data = inject<ApiKeyDialogData>(MAT_DIALOG_DATA);
 
   /** True right after the key was copied, to briefly swap the icon/hint. */
   protected copied = signal(false);
+
+  /** True right after the install command was copied, to briefly swap the icon/hint. */
+  protected commandCopied = signal(false);
+
+  /** Ready-to-run command that installs the client for this household and key. */
+  protected installCommand = this.clientDataService.getInstallCommand(this.data.householdId, this.data.apiKey);
 
   /** Copies the API key to the clipboard and briefly flags success. */
   copy(): void {
     navigator.clipboard.writeText(this.data.apiKey).then(() => {
       this.copied.set(true);
       setTimeout(() => this.copied.set(false), 2000);
+    });
+  }
+
+  /** Copies the ready-to-run install command to the clipboard and briefly flags success. */
+  copyCommand(): void {
+    navigator.clipboard.writeText(this.installCommand).then(() => {
+      this.commandCopied.set(true);
+      setTimeout(() => this.commandCopied.set(false), 2000);
     });
   }
 }

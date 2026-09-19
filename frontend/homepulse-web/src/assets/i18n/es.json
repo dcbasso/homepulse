@@ -1,6 +1,7 @@
 {
     "COMMON": {
         "ERROR": "Se produjo un error inesperado",
+        "LOADING": "Cargando...",
         "SEARCH": "Buscar",
         "REMOVE": "Eliminar",
         "LIVE": "En vivo",
@@ -22,10 +23,11 @@
         "ABOUT": "Acerca de",
         "SIGN_OUT": "Cerrar sesión",
         "MENU": "Menú",
+        "USER_MENU": "Menú de usuario",
         "PREFERENCES": "Preferencias",
         "CLIENT": "Client",
         "HOUSEHOLD": "Hogar",
-        "ADMIN_HOUSEHOLDS": "Todos los hogares"
+        "ADMIN_HOUSEHOLDS": "Hogares"
     },
     "PREFERENCES": {
         "TITLE": "Preferencias",
@@ -178,7 +180,12 @@
         "INVITE_ERROR": "No se pudo enviar la invitación. Inténtalo de nuevo.",
         "NO_HOUSEHOLDS": "No se encontraron hogares",
         "API_KEY_COUNT": "{{count}} API key(s)",
-        "ERROR": "No se pudieron cargar los hogares. Inténtalo de nuevo."
+        "ERROR": "No se pudieron cargar los hogares. Inténtalo de nuevo.",
+        "ACTIVATE": "Activar",
+        "DEACTIVATE": "Desactivar",
+        "CONFIRM_DEACTIVATE": "¿Desactivar \"{{name}}\"? Su dueño ya no podrá iniciar sesión y su cliente dejará de enviar datos. Esto se puede revertir después.",
+        "STATUS_UPDATE_SUCCESS": "Estado del hogar actualizado",
+        "STATUS_UPDATE_ERROR": "No se pudo actualizar el estado. Inténtalo de nuevo."
     },
     "CLIENT": {
         "TITLE": "Cliente de monitoreo",
@@ -200,6 +207,13 @@
         "TAB_ARCH": "Arch",
         "COMING_SOON": "Próximamente",
         "DOWNLOAD": "Descargar binario",
+        "QUICK_INSTALL_TITLE": "Instalación rápida",
+        "QUICK_INSTALL_DESCRIPTION": "Descarga el instalador automático de esta implementación — ya viene con los endpoints configurados y solo pide el ID del hogar y la API key.",
+        "QUICK_INSTALL_DOWNLOAD": "Descargar install-prod.sh",
+        "QUICK_INSTALL_USAGE": "Uso:",
+        "QUICK_INSTALL_STEP": "Genera la API key arriba y reemplaza <API_KEY> por ella — el comando listo con ambos valores también aparece en el diálogo al generar una clave nueva.",
+        "INSTALL_COMMAND_TITLE": "Comando de instalación",
+        "INSTALL_COMMAND_HINT": "Pega este comando en el host donde se instalará el client (requiere sudo).",
         "INSTALL_STEPS_TITLE": "Instalación como servicio (systemd)",
         "INSTALL_STEP_1": "Descarga el binario de arriba y dale permiso de ejecución: chmod +x homepulse-client",
         "INSTALL_STEP_2": "Muévelo a /usr/local/bin/homepulse-client",

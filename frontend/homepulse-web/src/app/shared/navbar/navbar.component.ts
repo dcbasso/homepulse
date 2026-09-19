@@ -10,6 +10,7 @@ import { MatListModule } from '@angular/material/list';
 import { MatDividerModule } from '@angular/material/divider';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatSelectModule } from '@angular/material/select';
+import { MatMenuModule } from '@angular/material/menu';
 import { TranslatePipe } from '@ngx-translate/core';
 import { map } from 'rxjs';
 import { AuthService } from '../../core/auth.service';
@@ -41,6 +42,7 @@ const MOBILE_BREAKPOINT = '(max-width: 768px)';
     MatDividerModule,
     MatFormFieldModule,
     MatSelectModule,
+    MatMenuModule,
     RouterLink,
     RouterLinkActive,
     TranslatePipe,
@@ -48,6 +50,23 @@ const MOBILE_BREAKPOINT = '(max-width: 768px)';
   template: `
     <mat-sidenav-container class="app-shell">
       <mat-sidenav #drawer mode="over" [fixedInViewport]="true">
+        <div class="drawer-user">
+          <div class="user-avatar">
+            @if (currentUser()?.photoURL; as photoURL) {
+              <img [src]="photoURL" alt="" />
+            } @else {
+              <span>{{ userInitial() }}</span>
+            }
+          </div>
+          <div class="user-info">
+            <span class="user-name">{{ currentUser()?.displayName || currentUser()?.email }}</span>
+            @if (currentUser()?.displayName) {
+              <span class="user-email">{{ currentUser()?.email }}</span>
+            }
+          </div>
+        </div>
+        <mat-divider />
+
         <mat-nav-list>
           <a mat-list-item routerLink="/dashboard" routerLinkActive="active-link" (click)="drawer.close()">
             {{ 'NAV.DASHBOARD' | translate }}
@@ -67,14 +86,14 @@ const MOBILE_BREAKPOINT = '(max-width: 768px)';
           <a mat-list-item routerLink="/client" routerLinkActive="active-link" (click)="drawer.close()">
             {{ 'NAV.CLIENT' | translate }}
           </a>
-          <a mat-list-item routerLink="/about" routerLinkActive="active-link" (click)="drawer.close()">
-            {{ 'NAV.ABOUT' | translate }}
-          </a>
           @if (isSuperAdmin()) {
             <a mat-list-item routerLink="/admin/households" routerLinkActive="active-link" (click)="drawer.close()">
               {{ 'NAV.ADMIN_HOUSEHOLDS' | translate }}
             </a>
           }
+          <a mat-list-item routerLink="/about" routerLinkActive="active-link" (click)="drawer.close()">
+            {{ 'NAV.ABOUT' | translate }}
+          </a>
 
           <mat-divider />
 
@@ -132,14 +151,14 @@ const MOBILE_BREAKPOINT = '(max-width: 768px)';
               <a mat-button routerLink="/client" routerLinkActive="active-link">
                 {{ 'NAV.CLIENT' | translate }}
               </a>
-              <a mat-button routerLink="/about" routerLinkActive="active-link">
-                {{ 'NAV.ABOUT' | translate }}
-              </a>
               @if (isSuperAdmin()) {
                 <a mat-button routerLink="/admin/households" routerLinkActive="active-link">
                   {{ 'NAV.ADMIN_HOUSEHOLDS' | translate }}
                 </a>
               }
+              <a mat-button routerLink="/about" routerLinkActive="active-link">
+                {{ 'NAV.ABOUT' | translate }}
+              </a>
             </nav>
           }
 
@@ -156,13 +175,32 @@ const MOBILE_BREAKPOINT = '(max-width: 768px)';
           }
 
           @if (!isMobile()) {
-            <a mat-button routerLink="/preferences" routerLinkActive="active-link">
-              <mat-icon>tune</mat-icon>
-              {{ 'NAV.PREFERENCES' | translate }}
-            </a>
-            <button mat-button (click)="signOut()">
-              {{ 'NAV.SIGN_OUT' | translate }}
+            <button mat-icon-button [matMenuTriggerFor]="userMenu" [attr.aria-label]="'NAV.USER_MENU' | translate">
+              <div class="user-avatar">
+                @if (currentUser()?.photoURL; as photoURL) {
+                  <img [src]="photoURL" alt="" />
+                } @else {
+                  <span>{{ userInitial() }}</span>
+                }
+              </div>
             </button>
+            <mat-menu #userMenu="matMenu">
+              <div class="menu-user-info">
+                <span class="user-name">{{ currentUser()?.displayName || currentUser()?.email }}</span>
+                @if (currentUser()?.displayName) {
+                  <span class="user-email">{{ currentUser()?.email }}</span>
+                }
+              </div>
+              <mat-divider />
+              <a mat-menu-item routerLink="/preferences">
+                <mat-icon>tune</mat-icon>
+                <span>{{ 'NAV.PREFERENCES' | translate }}</span>
+              </a>
+              <button mat-menu-item (click)="signOut()">
+                <mat-icon>logout</mat-icon>
+                <span>{{ 'NAV.SIGN_OUT' | translate }}</span>
+              </button>
+            </mat-menu>
           }
         </mat-toolbar>
 
@@ -207,6 +245,53 @@ const MOBILE_BREAKPOINT = '(max-width: 768px)';
       width: calc(100% - 2rem);
       margin: 0.5rem 1rem;
     }
+    .user-avatar {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background-color: var(--mat-sys-primary);
+      color: var(--mat-sys-on-primary);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.9rem;
+      font-weight: 700;
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+    .user-avatar img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .drawer-user {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 1rem;
+    }
+    .user-info, .menu-user-info {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+    .menu-user-info {
+      padding: 0.5rem 1rem;
+    }
+    .user-name {
+      font-weight: 600;
+      font-size: 0.9rem;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .user-email {
+      font-size: 0.8rem;
+      color: var(--mat-sys-on-surface-variant);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
   `],
 })
 export class NavbarComponent {
@@ -232,6 +317,16 @@ export class NavbarComponent {
     this.authService.currentUser$.pipe(map((u) => u?.email === environment.superAdminEmail)),
     { initialValue: false },
   );
+
+  /** Currently signed-in Firebase user, shown in the account menu so it's clear who's logged in. */
+  protected currentUser = toSignal(this.authService.currentUser$, { initialValue: null });
+
+  /** First letter of the user's name (or email) used as a fallback avatar when there's no photo. */
+  protected userInitial = computed(() => {
+    const user = this.currentUser();
+    const source = user?.displayName || user?.email || '';
+    return source.charAt(0).toUpperCase();
+  });
 
   /**
    * Signs out the current user and navigates to the login screen.

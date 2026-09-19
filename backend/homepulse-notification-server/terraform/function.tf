@@ -541,3 +541,54 @@ resource "google_cloud_run_service_iam_member" "list_households_invoker" {
   role     = "roles/run.invoker"
   member   = "allUsers"
 }
+
+# ---------------------------------------------------------------------------
+# Cloud Function (Gen 2) — set-household-status
+#
+# Called from the platform admin screen to activate/deactivate a household.
+# Same access-control model as list-households: IAM allows unauthenticated
+# invocation, but the function itself only acts on requests carrying a valid
+# Firebase ID token whose email matches var.super_admin_email.
+# ---------------------------------------------------------------------------
+
+resource "google_cloudfunctions2_function" "set_household_status" {
+  name     = "set-household-status"
+  location = var.region
+
+  labels = local.common_labels
+
+  build_config {
+    runtime     = "python312"
+    entry_point = "set_household_status"
+
+    source {
+      storage_source {
+        bucket = google_storage_bucket.function_source.name
+        object = google_storage_bucket_object.function_source.name
+      }
+    }
+  }
+
+  service_config {
+    available_memory   = "256M"
+    timeout_seconds    = 30
+    min_instance_count = 0
+    max_instance_count = 1
+
+    environment_variables = {
+      GCP_PROJECT_ID     = var.project_id
+      FIRESTORE_DATABASE = var.firestore_database
+      SUPER_ADMIN_EMAIL  = var.super_admin_email
+    }
+
+    service_account_email = var.sa_email
+  }
+}
+
+resource "google_cloud_run_service_iam_member" "set_household_status_invoker" {
+  project  = var.project_id
+  location = var.region
+  service  = google_cloudfunctions2_function.set_household_status.name
+  role     = "roles/run.invoker"
+  member   = "allUsers"
+}

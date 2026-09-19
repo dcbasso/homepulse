@@ -27,4 +27,5 @@ export interface HouseholdMembership {
   id: string;
   name: string;
   role: HouseholdRole;
+  status: string;
 }
